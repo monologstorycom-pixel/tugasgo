@@ -14,7 +14,7 @@ for(const asset of ['/image/logo.png','/image/logo1.png','/image/logo-real.png']
 
 const css=readFileSync(new URL('./src/App.css',import.meta.url),'utf8')
 if(!css.includes('.event-dot.completed'))throw new Error('Status COMPLETED belum memakai style timeline yang benar')
-if(!css.includes('.login-brand{padding:52px 8vw;color:#fff;background:#dce8cf'))throw new Error('Palet login atau teks putih berubah')
+if(!css.includes('.login-brand{padding:52px 8vw;color:white;background:#133e2c'))throw new Error('Palet login awal berubah')
 if(css.includes('.login-brand .logo-lockup{background:'))throw new Error('Logo login tidak boleh diberi bidang tambahan')
 
 const html=readFileSync(new URL('./index.html',import.meta.url),'utf8')
