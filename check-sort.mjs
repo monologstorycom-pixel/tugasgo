@@ -14,7 +14,7 @@ for(const asset of ['/image/logo.png','/image/logo1.png','/image/logo-real.png']
 
 const css=readFileSync(new URL('./src/App.css',import.meta.url),'utf8')
 if(!css.includes('.event-dot.completed'))throw new Error('Status COMPLETED belum memakai style timeline yang benar')
-if(!css.includes('.login-brand{padding:52px 8vw;color:#104734;background:#dce8cf'))throw new Error('Palet login belum mendukung logo asli')
+if(!css.includes('.login-brand{padding:52px 8vw;color:#fff;background:#52705d'))throw new Error('Palet login belum mendukung logo dan teks putih')
 if(css.includes('.login-brand .logo-lockup{background:'))throw new Error('Logo login tidak boleh diberi bidang tambahan')
 
 const html=readFileSync(new URL('./index.html',import.meta.url),'utf8')
