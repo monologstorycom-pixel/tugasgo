@@ -20,4 +20,11 @@ if(css.includes('.login-brand .logo-lockup{background:'))throw new Error('Logo l
 const html=readFileSync(new URL('./index.html',import.meta.url),'utf8')
 if(!html.includes('href="/image/logo1.png"'))throw new Error('Favicon asli belum dipakai')
 
-console.log(`PASS status, sorting, branding, dan timeline: ${actual}`)
+for(const field of ['assignee:string','address:string','startedAt?:number','completedAt?:number','cancelledAt?:number','cancelReason?:string','photos?:string[]','referencePhoto?:string'])if(!source.includes(field))throw new Error(`Field alur belum tersedia: ${field}`)
+for(const behavior of ["['activity','Aktivitas']",'multiple','Batalkan tugas','Alasan pembatalan','task.startedAt','task.completedAt','task.photos'])if(!source.includes(behavior))throw new Error(`Alur prototype belum tersedia: ${behavior}`)
+if(!source.includes("role==='Staff'?tasks.filter(t=>t.requester.includes('Andi'))"))throw new Error('Riwayat Staff belum dibatasi')
+if(!source.includes("role==='Driver'&&task.status==='WAITING'"))throw new Error('Aksi transisi task belum dibatasi untuk Driver')
+if(!source.includes('setReturnView(view)')||!source.includes('navigate(returnView)'))throw new Error('Navigasi kembali belum mempertahankan halaman asal')
+if(!source.includes("task.status==='CANCELLED'?<div className=\"cancelled-box\""))throw new Error('Fallback detail masih salah menampilkan task aktif sebagai dibatalkan')
+
+console.log(`PASS status, sorting, branding, timeline, otorisasi, navigasi, dan alur lengkap: ${actual}`)
