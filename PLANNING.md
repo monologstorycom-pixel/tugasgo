@@ -55,8 +55,8 @@
 - [x] Filter status, prioritas, tanggal
 - [x] Report per driver (total, selesai, batal, durasi)
 - [x] Report per divisi
-- [x] Admin panel — CRUD user (driver, staff, admin)
-- [x] Admin panel — CRUD divisi
+- [x] Admin panel — CRUD user (driver, staff, admin), hapus permanen beserta data terkait
+- [x] Admin panel — CRUD divisi, hapus permanen beserta tugas terkait
 - [x] Edit user (nama, HP, divisi, password)
 - [x] Toggle driver aktif/libur
 
@@ -73,27 +73,36 @@
 ## 🔄 Sedang / Akan Dikerjakan Berikutnya
 
 ### Guest Mode (Prioritas Tinggi)
-- [ ] Tabel `app_settings` di DB — simpan konfigurasi sistem
-- [ ] Endpoint `GET /api/settings` — public, tidak perlu auth
-- [ ] Endpoint `PATCH /api/admin/settings` — hanya Admin
-- [ ] Toggle "Guest Mode" di Admin panel
-- [ ] Halaman `/buat-tugas` — form tanpa login
-  - [ ] Input nama pembuat (text, wajib)
-  - [ ] Dropdown divisi dari DB
-  - [ ] Dropdown driver aktif dari DB
-  - [ ] Form task seperti biasa (title, lokasi, instruksi, prioritas, foto)
-  - [ ] Submit → task tersimpan dengan creator_name + division
-- [ ] Kalau Guest Mode OFF → halaman `/buat-tugas` redirect ke login
+- [x] Tabel `app_settings` di DB — simpan konfigurasi sistem
+- [x] Endpoint `GET /api/settings` — public, hanya expose `guest_mode`
+- [x] Endpoint `PATCH /api/admin/settings` — hanya Admin, key tervalidasi
+- [x] Toggle "Guest Mode" di Admin panel
+- [x] Halaman `/tugasgo` — form tanpa login saat Guest Mode ON
+  - [x] Input nama pembuat (text, wajib)
+  - [x] Dropdown divisi aktif dari DB
+  - [x] Dropdown driver aktif dari DB
+  - [x] Form task: title, lokasi, instruksi, prioritas, deadline, jadwal
+  - [x] Upload foto referensi guest ke GCS
+  - [x] Submit → task tersimpan dengan nama pembuat terstruktur dan divisi
+- [x] Halaman utama `/` untuk login; login Staff dinonaktifkan saat Guest Mode ON
+- [x] Guest memiliki 2 menu dengan UI sama seperti mode Staff: Buat Tugas dan Aktivitas
+- [x] Aktivitas publik menampilkan timeline driver dan status tugas hari berjalan
+- [x] Kalau Guest Mode OFF → link guest kembali ke halaman login
+- [x] Validasi server untuk driver, divisi, koordinat, tanggal, file, dan transaksi notifikasi
+- [x] Rate limiting untuk login, upload, dan pembuatan task guest
 
 ### Perbaikan UI
-- [ ] Audit ulang semua halaman di HP (screenshot per halaman)
-- [ ] Perbaiki notif bell — pastikan panel tidak keluar layar di mobile
-- [ ] Detail task di mobile — foto dan meta block lebih rapi
-- [ ] Form buat task di mobile — Places Autocomplete tidak terlalu kecil
+- [x] Audit responsif semua halaman pada viewport 320px, 375px, dan 768px
+- [x] Perbaiki notif bell — panel dan touch target aman di mobile
+- [x] Detail task di mobile — foto, teks panjang, dan meta block responsif
+- [x] Form buat task di mobile — input, file, tanggal, dan Places Autocomplete minimal 44px
+- [x] Admin panel responsif — tab scroll, form satu kolom, action button rapi
+- [x] Laporan responsif — statistik 2 kolom dan tabel scroll terkontrol
+- [x] Bottom navigation mendukung safe area perangkat
 
 ### Keamanan & Stabilitas
-- [ ] Rate limiting di API (login, upload)
-- [ ] Validasi file upload (type + size) lebih ketat
+- [x] Rate limiting di API (login, upload, guest task)
+- [x] Validasi file upload (magic bytes + type + size)
 - [ ] Session expiry diperpanjang (saat ini 12 jam → 7 hari untuk "ingat saya")
 - [ ] Error boundary di React — kalau komponen crash tidak crash seluruh app
 

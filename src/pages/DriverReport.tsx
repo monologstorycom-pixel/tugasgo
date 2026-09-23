@@ -69,7 +69,7 @@ export default function DriverReport({ user, tasks }: { user: SessionUser; tasks
       </div>
 
       {/* Stats ringkas */}
-      <section className="stats" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginBottom: 20 }}>
+      <section className="stats driver-report-stats">
         <div><small>TOTAL</small><strong>{stats.total}</strong></div>
         <div><small>SELESAI</small><strong>{stats.completed}</strong></div>
         <div><small>DIBATALKAN</small><strong>{stats.cancelled}</strong></div>
@@ -99,11 +99,11 @@ export default function DriverReport({ user, tasks }: { user: SessionUser; tasks
       </div>
 
       {/* Tabel */}
-      <section className="panel report-table" style={{ marginTop: 16 }}>
+      <section className="panel report-table driver-report-table" style={{ marginTop: 16 }}>
         <div className="section-title">
           <div><h2>Riwayat tugas</h2><p>{myTasks.length} tugas</p></div>
         </div>
-        <div className="table-wrap">
+        <div className="table-wrap" tabIndex={0} role="region" aria-label="Tabel riwayat tugas, geser horizontal untuk melihat kolom lain">
           <table>
             <thead>
               <tr>
@@ -127,7 +127,7 @@ export default function DriverReport({ user, tasks }: { user: SessionUser; tasks
                     <td>
                       <b style={{ display: 'block', fontSize: 13 }}>{t.title}</b>
                       {t.referencePhoto && (t.referencePhoto.startsWith('http') || t.referencePhoto.startsWith('blob')) && (
-                        <a href={t.referencePhoto} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: 'var(--blue)' }}>Foto referensi ↗</a>
+                        <a className="report-photo-link" href={t.referencePhoto} target="_blank" rel="noreferrer">Foto referensi ↗</a>
                       )}
                     </td>
                     <td style={{ fontSize: 12 }}>{t.destination}<br /><span style={{ color: 'var(--muted)', fontSize: 11 }}>{t.address}</span></td>
@@ -155,8 +155,7 @@ export default function DriverReport({ user, tasks }: { user: SessionUser; tasks
                       {t.photos?.length ? (
                         <div style={{ marginTop: 4, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                           {t.photos.filter(p => p.startsWith('http') || p.startsWith('blob')).map((p, i) => (
-                            <a key={i} href={p} target="_blank" rel="noreferrer"
-                              style={{ fontSize: 10, color: 'var(--blue)' }}>Bukti {i + 1} ↗</a>
+                            <a className="report-photo-link" key={i} href={p} target="_blank" rel="noreferrer">Bukti {i + 1} ↗</a>
                           ))}
                         </div>
                       ) : null}

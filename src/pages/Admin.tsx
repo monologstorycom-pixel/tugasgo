@@ -8,6 +8,7 @@ export default function Admin({ divisions, onReload }: { divisions: Division[]; 
   const [tab, setTab] = useState<'drivers' | 'users' | 'divisions' | 'settings'>('drivers')
   const [guestMode, setGuestMode] = useState(false)
   const [guestLoading, setGuestLoading] = useState(false)
+  const [guestError, setGuestError] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const [showAddDiv, setShowAddDiv] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
@@ -29,12 +30,12 @@ export default function Admin({ divisions, onReload }: { divisions: Division[]; 
   }, [])
 
   const toggleGuestMode = async () => {
-    setGuestLoading(true)
+    setGuestLoading(true); setGuestError('')
     try {
       const next = !guestMode
       await request('/admin/settings', { method: 'PATCH', body: JSON.stringify({ guest_mode: String(next) }) })
       setGuestMode(next)
-    } catch { /* silent */ }
+    } catch (e) { setGuestError(e instanceof Error ? e.message : 'Gagal mengubah Guest Mode') }
     finally { setGuestLoading(false) }
   }
 
@@ -59,6 +60,13 @@ export default function Admin({ divisions, onReload }: { divisions: Division[]; 
   }
 
   const toggle = async (id: number, active: boolean) => { await request(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify({ active }) }); load() }
+  const removeUser = async (user: UserRecord) => {
+    if (!window.confirm(`Hapus permanen ${user.name}? Semua tugas, notifikasi, dan lokasi terkait ikut terhapus. Tindakan ini tidak dapat dibatalkan.`)) return
+    setBusy(true); setError('')
+    try { await request(`/admin/users/${user.id}`, { method: 'DELETE' }); load() }
+    catch (e) { setError(e instanceof Error ? e.message : 'Gagal menghapus pengguna') }
+    finally { setBusy(false) }
+  }
   const addDiv = async (e: React.FormEvent) => {
     e.preventDefault(); setBusy(true); setError('')
     try { await request('/admin/divisions', { method: 'POST', body: JSON.stringify(divForm) }); setShowAddDiv(false); setDivForm({ name: '' }); onReload() }
@@ -66,18 +74,25 @@ export default function Admin({ divisions, onReload }: { divisions: Division[]; 
     finally { setBusy(false) }
   }
   const toggleDiv = async (id: number, active: boolean) => { await request(`/admin/divisions/${id}`, { method: 'PATCH', body: JSON.stringify({ active }) }); onReload() }
+  const removeDivision = async (division: Division) => {
+    if (!window.confirm(`Hapus permanen divisi ${division.name}? Semua tugas divisi ikut terhapus dan pengguna dilepas dari divisi. Tindakan ini tidak dapat dibatalkan.`)) return
+    setBusy(true); setError('')
+    try { await request(`/admin/divisions/${division.id}`, { method: 'DELETE' }); onReload() }
+    catch (e) { setError(e instanceof Error ? e.message : 'Gagal menghapus divisi') }
+    finally { setBusy(false) }
+  }
 
   const drivers = users.filter(u => u.role === 'DRIVER')
   const nonDrivers = users.filter(u => u.role !== 'DRIVER')
 
   return (
-    <main className="page">
-      <div className="page-head"><div><h1>Admin panel</h1></div></div>
-      <div className="tab-bar">
-        <button className={tab === 'drivers' ? 'active' : ''} onClick={() => setTab('drivers')}>Driver</button>
-        <button className={tab === 'users' ? 'active' : ''} onClick={() => setTab('users')}>Pengguna</button>
-        <button className={tab === 'divisions' ? 'active' : ''} onClick={() => setTab('divisions')}>Divisi</button>
-        <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>Pengaturan</button>
+    <main className="page admin-page">
+      <div className="page-head"><div><p className="eyebrow">MANAJEMEN SISTEM</p><h1>Admin panel</h1><p className="admin-page-subtitle">Kelola driver, pengguna, divisi, dan akses guest.</p></div></div>
+      <div className="tab-bar admin-tabs" role="tablist" aria-label="Menu admin">
+<button role="tab" aria-selected={tab === 'drivers'} className={tab === 'drivers' ? 'active' : ''} onClick={() => setTab('drivers')}>Driver</button>
+         <button role="tab" aria-selected={tab === 'users'} className={tab === 'users' ? 'active' : ''} onClick={() => setTab('users')}>Pengguna</button>
+         <button role="tab" aria-selected={tab === 'divisions'} className={tab === 'divisions' ? 'active' : ''} onClick={() => setTab('divisions')}>Divisi</button>
+         <button role="tab" aria-selected={tab === 'settings'} className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>Pengaturan</button>
       </div>
 
       {/* ── Tab Driver ── */}
@@ -90,6 +105,7 @@ export default function Admin({ divisions, onReload }: { divisions: Division[]; 
             </div>
             <button className="primary" onClick={() => { setForm(f => ({ ...f, role: 'DRIVER' })); setShowAdd(v => !v); setTab('users') }}>+ Tambah driver</button>
           </div>
+          {error && <p className="error admin-error" role="alert">{error}</p>}
           {drivers.length === 0 && <div className="empty"><b>Belum ada driver</b></div>}
           <div className="driver-status-list">
             {drivers.map(d => (
@@ -102,13 +118,10 @@ export default function Admin({ divisions, onReload }: { divisions: Division[]; 
                 <div className={`driver-status-badge ${d.active ? 'on' : 'off'}`}>
                   {d.active ? 'Aktif' : 'Libur'}
                 </div>
-                <button
-                  className={d.active ? 'secondary' : 'primary'}
-                  style={{ fontSize: 12, padding: '6px 12px', minHeight: 'unset' }}
-                  onClick={() => toggle(d.id, !d.active)}
-                >
-                  {d.active ? 'Set Libur' : 'Set Aktif'}
-                </button>
+                <div className="admin-row-actions">
+                  <button className={d.active ? 'secondary' : 'primary'} onClick={() => toggle(d.id, !d.active)}>{d.active ? 'Set Libur' : 'Set Aktif'}</button>
+                  <button className="danger" onClick={() => removeUser(d)} disabled={busy}>Hapus</button>
+                </div>
               </div>
             ))}
           </div>
@@ -136,16 +149,18 @@ export default function Admin({ divisions, onReload }: { divisions: Division[]; 
               <div className="form-actions"><button type="button" className="secondary" onClick={() => setShowAdd(false)}>Batal</button><button className="primary" disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan'}</button></div>
             </form>
           )}
+          {!showAdd && error && <p className="error admin-error" role="alert">{error}</p>}
           <div className="user-list">
             {nonDrivers.map(u => (
               <div key={u.id}>
                 <div className={`user-row ${!u.active ? 'inactive' : ''}`}>
                   <span className="avatar">{u.name[0]}</span>
                   <div><b>{u.name}</b> <Badge>{u.role}</Badge><small>{u.username}{u.division_name ? ` · ${u.division_name}` : ''}{u.phone ? ` · ${u.phone}` : ''}</small></div>
-                  <div style={{ display: 'flex', gap: 6 }}>
+                  <div className="user-row-actions">
                     <button className="secondary" style={{ fontSize: 12, padding: '6px 10px' }} onClick={() => editId === u.id ? setEditId(null) : (setEditId(u.id), setEditForm({ name: u.name, phone: u.phone || '', divisionId: String(divisions.find(d => d.name === u.division_name)?.id || ''), password: '' }))}>{editId === u.id ? 'Tutup' : 'Edit'}</button>
-                    <button className={u.active ? 'secondary' : 'primary'} style={{ fontSize: 12, padding: '6px 10px' }} onClick={() => toggle(u.id, !u.active)}>{u.active ? 'Nonaktif' : 'Aktifkan'}</button>
-                  </div>
+                     <button className={u.active ? 'secondary' : 'primary'} style={{ fontSize: 12, padding: '6px 10px' }} onClick={() => toggle(u.id, !u.active)}>{u.active ? 'Nonaktif' : 'Aktifkan'}</button>
+                     <button className="danger" onClick={() => removeUser(u)} disabled={busy}>Hapus</button>
+                   </div>
                 </div>
                 {editId === u.id && (
                   <form className="form inline-form" onSubmit={saveEdit}>
@@ -176,12 +191,16 @@ export default function Admin({ divisions, onReload }: { divisions: Division[]; 
               <div className="form-actions"><button type="button" className="secondary" onClick={() => setShowAddDiv(false)}>Batal</button><button className="primary" disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan'}</button></div>
             </form>
           )}
+          {!showAddDiv && error && <p className="error admin-error" role="alert">{error}</p>}
           <div className="user-list">
             {divisions.map(d => (
               <div key={d.id} className={`user-row ${!d.active ? 'inactive' : ''}`}>
                 <span className="avatar">{d.name[0]}</span>
                 <div><b>{d.name}</b></div>
-                <button className={d.active ? 'secondary' : 'primary'} onClick={() => toggleDiv(d.id, !d.active)}>{d.active ? 'Nonaktifkan' : 'Aktifkan'}</button>
+                <div className="admin-row-actions">
+                  <button className={d.active ? 'secondary' : 'primary'} onClick={() => toggleDiv(d.id, !d.active)}>{d.active ? 'Nonaktifkan' : 'Aktifkan'}</button>
+                  <button className="danger" onClick={() => removeDivision(d)} disabled={busy}>Hapus</button>
+                </div>
               </div>
             ))}
           </div>
@@ -196,7 +215,7 @@ export default function Admin({ divisions, onReload }: { divisions: Division[]; 
             <div className="settings-row">
               <div>
                 <b>Guest Mode</b>
-                <small>Staff dapat membuat tugas tanpa login. Form buka tugas tersedia di <code>/buat-tugas</code></small>
+                <small>Form tugas tanpa login tersedia melalui link khusus <code>/tugasgo</code></small>
               </div>
               <button
                 className={guestMode ? 'primary' : 'secondary'}
@@ -207,12 +226,13 @@ export default function Admin({ divisions, onReload }: { divisions: Division[]; 
                 {guestLoading ? '…' : guestMode ? '✓ Aktif' : 'Nonaktif'}
               </button>
             </div>
+            {guestError && <p className="error">{guestError}</p>}
             {guestMode && (
               <div className="guest-link-box">
                 <small>Link form buat tugas:</small>
-                <code>{window.location.origin}/#/buat-tugas</code>
+                <code>{window.location.origin}/tugasgo</code>
                 <button className="secondary" style={{ fontSize: 12, padding: '4px 10px' }}
-                  onClick={() => navigator.clipboard.writeText(`${window.location.origin}/#/buat-tugas`)}>
+                  onClick={() => navigator.clipboard.writeText(`${window.location.origin}/tugasgo`)}>
                   Salin
                 </button>
               </div>

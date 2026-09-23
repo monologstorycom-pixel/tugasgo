@@ -61,7 +61,7 @@ export function StaffDashboard({ user, tasks, onOpen, setView, driverLocations }
       )}
       <section className="panel">
         <div className="section-title"><div><h2>Tugas saya</h2></div></div>
-        <div className="filters" style={{ padding: '12px 20px 0' }}>
+        <div className="filters task-filters">
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
             <option value="ALL">Semua status</option>
             <option value="WAITING">Waiting</option>

@@ -81,7 +81,7 @@ export default function Detail({ task, role, onBack, onUpdate }: {
       <div className="panel form">
         <label>Alasan<textarea rows={4} value={reason} onChange={e => setReason(e.target.value)} placeholder="Jelaskan alasan pembatalan" /></label>
         {error && <p className="error">{error}</p>}
-        <button className="danger full" onClick={cancel} disabled={busy}>{busy ? 'Membatalkan…' : 'Konfirmasi pembatalan'}</button>
+        <button className="secondary danger full" onClick={cancel} disabled={busy}>{busy ? 'Membatalkan…' : 'Konfirmasi pembatalan'}</button>
       </div>
     </main>
   )

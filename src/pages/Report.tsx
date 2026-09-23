@@ -16,9 +16,9 @@ export default function Report() {
   return (
     <main className="page">
       <div className="page-head"><div><h1>Statistik operasional</h1></div></div>
-      <section className="panel report-table">
-        <div className="section-title"><div><h2>Per Driver</h2></div></div>
-        <div className="table-wrap">
+       <section className="panel report-table">
+         <div className="section-title"><div><h2>Per Driver</h2></div></div>
+         <div className="table-wrap" tabIndex={0} role="region" aria-label="Laporan per driver, geser horizontal untuk melihat kolom lain">
           <table>
             <thead><tr><th>Driver</th><th>Total</th><th>Selesai</th><th>Batal</th><th>Waiting</th><th>Aktif</th><th>Total durasi</th><th>Rata-rata</th></tr></thead>
             <tbody>
@@ -33,9 +33,9 @@ export default function Report() {
           </table>
         </div>
       </section>
-      <section className="panel report-table" style={{ marginTop: 20 }}>
-        <div className="section-title"><div><h2>Per Divisi</h2></div></div>
-        <div className="table-wrap">
+       <section className="panel report-table" style={{ marginTop: 20 }}>
+         <div className="section-title"><div><h2>Per Divisi</h2></div></div>
+         <div className="table-wrap" tabIndex={0} role="region" aria-label="Laporan per divisi, geser horizontal untuk melihat kolom lain">
           <table>
             <thead><tr><th>Divisi</th><th>Total</th><th>Selesai</th><th>Waiting</th><th>Aktif</th><th>Batal</th></tr></thead>
             <tbody>

@@ -80,14 +80,14 @@ export default function App() {
 
   const login = async (u: SessionUser) => {
     setUser(u); setWsToken('cookie'); setLoading(true)
-    try { await loadAll(u); navigate('dashboard') }
+    try { await loadAll(u); window.history.replaceState(null, '', '/'); navigate('dashboard') }
     catch (e) { setFatal(e instanceof Error ? e.message : 'Gagal memuat data') }
     finally { setLoading(false) }
   }
 
   const logout = async () => {
     try { await request('/auth/logout', { method: 'POST' }) }
-    finally { setUser(null); setTasks([]); setWsToken(null); navigate('dashboard') }
+    finally { setUser(null); setTasks([]); setWsToken(null); window.location.href = '/' }
   }
 
   const open = (t: Task) => { setReturnView(view); setSelected(t); setView('detail') }
@@ -110,8 +110,7 @@ export default function App() {
   const reloadDivisions = useCallback(() => { request<{ divisions: Division[] }>('/admin/divisions').then(r => setDivisions(r.divisions)).catch(() => {}) }, [])
 
   if (loading) return <main className="loading">Memuat TugasGo…</main>
-  // Guest mode — halaman buat tugas tanpa login
-  if (window.location.hash === '#/buat-tugas') return <GuestTask />
+  if (window.location.pathname === '/tugasgo') return <GuestTask />
   if (!user || !role) return <Login onLogin={(u) => login(u)} />
   if (fatal) return <main className="loading"><div><b>Gagal memuat data</b><p>{fatal}</p><button className="primary" onClick={() => location.reload()}>Coba lagi</button></div></main>
 

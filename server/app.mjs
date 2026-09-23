@@ -11,6 +11,17 @@ const allowedOrigin = process.env.APP_ORIGIN || 'http://localhost:5173'
 // Terima semua origin yang mengakses port 5173 (localhost dan IP lokal)
 const isAllowedOrigin = origin => !origin || origin === allowedOrigin || /^http:\/\/192\.168\.\d+\.\d+:5173$/.test(origin) || origin === 'http://localhost:5173'
 const cookieName = 'tugasgo_session'
+const rateBuckets = new Map()
+const rateLimit = (req, key, limit, windowMs) => {
+  const id = `${key}:${req.socket.remoteAddress || 'unknown'}`
+  const now = Date.now()
+  const bucket = rateBuckets.get(id)
+  if (!bucket || bucket.resetAt <= now) {
+    rateBuckets.set(id, { count: 1, resetAt: now + windowMs })
+    return
+  }
+  if (++bucket.count > limit) throw Object.assign(new Error('Terlalu banyak permintaan, coba lagi nanti'), { status: 429 })
+}
 
 // Google Cloud Storage — opsional, hanya aktif kalau env tersedia
 const gcs = process.env.GCS_BUCKET ? new Storage(
@@ -44,6 +55,40 @@ const bearer = req => req.headers.authorization?.startsWith('Bearer ')
   : parseCookies(req)[cookieName]
 const cookie = (token, maxAge = 60 * 60 * 12) =>
   `${cookieName}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`
+const imageType = data => {
+  if (data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) return { contentType: 'image/jpeg', ext: 'jpg' }
+  if (data.length >= 8 && data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return { contentType: 'image/png', ext: 'png' }
+  if (data.length >= 12 && data.subarray(0, 4).toString() === 'RIFF' && data.subarray(8, 12).toString() === 'WEBP') return { contentType: 'image/webp', ext: 'webp' }
+  return null
+}
+const readUpload = async req => {
+  const ct = req.headers['content-type'] || ''
+  if (!ct.includes('multipart/form-data')) throw Object.assign(new Error('Harus multipart/form-data'), { status: 400 })
+  const boundary = ct.split('boundary=')[1]?.trim().replace(/^"|"$/g, '')
+  if (!boundary) throw Object.assign(new Error('Boundary tidak ditemukan'), { status: 400 })
+  const chunks = []; let size = 0
+  for await (const chunk of req) {
+    size += chunk.length
+    if (size > 10_000_000) throw Object.assign(new Error('File terlalu besar (max 10MB)'), { status: 413 })
+    chunks.push(chunk)
+  }
+  const buf = Buffer.concat(chunks)
+  const parts = buf.toString('latin1').split(`--${boundary}`)
+  let fileData = null; let photoType = 'COMPLETION'
+  for (const raw of parts) {
+    const headerEnd = raw.indexOf('\r\n\r\n')
+    if (headerEnd < 0) continue
+    const header = raw.slice(0, headerEnd)
+    const body = Buffer.from(raw.slice(headerEnd + 4).replace(/\r\n$/, ''), 'latin1')
+    if (header.includes('name="photoType"')) photoType = body.toString().trim()
+    else if (header.includes('filename=')) fileData = body
+  }
+  if (!fileData) throw Object.assign(new Error('File tidak ditemukan'), { status: 400 })
+  if (!['REFERENCE', 'COMPLETION'].includes(photoType)) throw Object.assign(new Error('photoType tidak valid'), { status: 400 })
+  const type = imageType(fileData)
+  if (!type) throw Object.assign(new Error('File harus JPEG, PNG, atau WebP'), { status: 400 })
+  return { fileData, photoType, ...type }
+}
 
 // ─── row mappers ─────────────────────────────────────────────────────────────
 
@@ -70,7 +115,7 @@ const rowTask = row => ({
   durationSeconds: row.started_at && row.completed_at
     ? Math.floor((new Date(row.completed_at) - new Date(row.started_at)) / 1000) : null,
 })
-const taskSelect = `SELECT t.*,creator.name requester,d.name division,assignee.name assignee
+const taskSelect = `SELECT t.*,COALESCE(t.guest_creator_name,creator.name) requester,d.name division,assignee.name assignee
   FROM tasks t
   JOIN users creator ON creator.id=t.creator_id
   JOIN divisions d ON d.id=t.division_id
@@ -185,21 +230,19 @@ export async function handler(req, res) {
 
     // ── settings (public read) ────────────────────────────────────────────────
     if (req.method === 'GET' && p === '/api/settings') {
-      const [rows] = await pool.query('SELECT setting_key, val FROM app_settings')
-      const settings = Object.fromEntries(rows.map(r => [r.setting_key, r.val]))
-      return json(res, 200, { settings })
+      const [[row]] = await pool.query("SELECT val FROM app_settings WHERE setting_key='guest_mode'")
+      return json(res, 200, { settings: { guest_mode: row?.val || 'false' } })
     }
 
     if (req.method === 'PATCH' && p === '/api/admin/settings') {
       const user = await requireUser(req)
       requireRole(user, 'ADMIN')
-      const b = await readBody(req)
-      for (const [k, v] of Object.entries(b)) {
-        await pool.execute(
-          'INSERT INTO app_settings(setting_key,val) VALUES(?,?) ON DUPLICATE KEY UPDATE val=VALUES(val)',
-          [k, String(v)]
-        )
-      }
+      const { guest_mode: guestMode } = await readBody(req)
+      if (!['true', 'false'].includes(String(guestMode))) return json(res, 400, { error: 'Guest mode tidak valid' })
+      await pool.execute(
+        'INSERT INTO app_settings(setting_key,val) VALUES(?,?) ON DUPLICATE KEY UPDATE val=VALUES(val)',
+        ['guest_mode', String(guestMode)]
+      )
       return json(res, 200, { ok: true })
     }
 
@@ -218,7 +261,65 @@ export async function handler(req, res) {
       return json(res, 200, { divisions: rows.map(x => ({ ...x, id: Number(x.id) })) })
     }
 
+    if (req.method === 'GET' && p === '/api/public/tasks/today') {
+      rateLimit(req, 'guest-history', 60, 60 * 1000)
+      const [[guestRow]] = await pool.query("SELECT val FROM app_settings WHERE setting_key='guest_mode'")
+      if (!guestRow || guestRow.val !== 'true') return json(res, 403, { error: 'Guest mode tidak aktif' })
+      const [rows] = await pool.query(
+        `SELECT t.title,t.status,t.priority,t.created_at,t.scheduled_at,u.name assignee,d.name division,
+          COALESCE(t.guest_creator_name,creator.name) requester
+         FROM tasks t
+         JOIN users u ON u.id=t.assignee_id
+         JOIN users creator ON creator.id=t.creator_id
+         JOIN divisions d ON d.id=t.division_id
+         WHERE t.created_at>=CURRENT_DATE() AND t.created_at<DATE_ADD(CURRENT_DATE(),INTERVAL 1 DAY)
+         ORDER BY t.created_at DESC`
+      )
+      return json(res, 200, { tasks: rows.map(row => ({
+        title: row.title,
+        status: row.status,
+        priority: row.priority,
+        assignee: row.assignee,
+        division: row.division,
+        requester: row.requester,
+        created: new Date(row.created_at).getTime(),
+        scheduledAt: row.scheduled_at ? new Date(row.scheduled_at).getTime() : null,
+      })) })
+    }
+
+    if (req.method === 'GET' && p === '/api/public/driver-locations') {
+      rateLimit(req, 'guest-locations', 120, 60 * 1000)
+      const [[guestRow]] = await pool.query("SELECT val FROM app_settings WHERE setting_key='guest_mode'")
+      if (!guestRow || guestRow.val !== 'true') return json(res, 403, { error: 'Guest mode tidak aktif' })
+      const [rows] = await pool.query(
+        `SELECT dll.driver_id,dll.task_id,dll.latitude,dll.longitude,dll.accuracy,dll.updated_at,u.name driver_name,
+          t.title task_title,t.location_name,t.address,d.name division,
+          COALESCE(t.guest_creator_name,creator.name) requester
+         FROM driver_last_location dll
+         JOIN users u ON u.id=dll.driver_id
+         LEFT JOIN tasks t ON t.id=dll.task_id AND t.status='IN_PROGRESS'
+         LEFT JOIN users creator ON creator.id=t.creator_id
+         LEFT JOIN divisions d ON d.id=t.division_id
+         WHERE u.role='DRIVER' AND u.active=TRUE`
+      )
+      return json(res, 200, { driverLocations: rows.map(row => ({
+        driverId: Number(row.driver_id),
+        driverName: row.driver_name,
+        active: row.task_title != null,
+        latitude: Number(row.latitude),
+        longitude: Number(row.longitude),
+        accuracy: row.accuracy == null ? null : Number(row.accuracy),
+        updatedAt: new Date(row.updated_at).getTime(),
+        taskTitle: row.task_title,
+        requester: row.requester,
+        destination: row.location_name,
+        address: row.address,
+        division: row.division,
+      })) })
+    }
+
     if (req.method === 'POST' && p === '/api/public/tasks') {
+      rateLimit(req, 'guest-task', 10, 60 * 60 * 1000)
       const [[guestRow]] = await pool.query("SELECT val FROM app_settings WHERE setting_key='guest_mode'")
       if (!guestRow || guestRow.val !== 'true') return json(res, 403, { error: 'Guest mode tidak aktif' })
       const b = await readBody(req)
@@ -231,34 +332,34 @@ export async function handler(req, res) {
       const [drivers] = await pool.execute("SELECT id FROM users WHERE id=? AND role='DRIVER' AND active=TRUE", [assigneeId])
       if (!drivers.length) return json(res, 400, { error: 'Driver tidak aktif' })
       const divisionId = Number(b.divisionId)
-      if (!divisionId) return json(res, 400, { error: 'Divisi wajib' })
-      // cari atau buat guest user sementara — pakai creator_name di description
-      // karena task butuh creator_id, kita pakai user admin sebagai proxy
+      if (!Number.isSafeInteger(divisionId)) return json(res, 400, { error: 'Divisi tidak valid' })
+      const [divisions] = await pool.execute('SELECT id FROM divisions WHERE id=? AND active=TRUE', [divisionId])
+      if (!divisions.length) return json(res, 400, { error: 'Divisi tidak aktif' })
       const [[adminUser]] = await pool.execute("SELECT id FROM users WHERE role='ADMIN' AND active=TRUE LIMIT 1")
       if (!adminUser) return json(res, 500, { error: 'Tidak ada admin aktif' })
-      const lat = b.latitude ? Number(b.latitude) : null
-      const lng = b.longitude ? Number(b.longitude) : null
+      const lat = b.latitude == null ? null : Number(b.latitude)
+      const lng = b.longitude == null ? null : Number(b.longitude)
+      if ((lat != null && (!Number.isFinite(lat) || lat < -90 || lat > 90)) || (lng != null && (!Number.isFinite(lng) || lng < -180 || lng > 180))) return json(res, 400, { error: 'Koordinat tidak valid' })
       const urgentDeadline = b.urgentDeadline ? new Date(b.urgentDeadline) : null
       const scheduledAt = b.scheduledAt ? new Date(b.scheduledAt) : null
-      // tambahkan nama guest ke description
-      const desc = `[Dibuat oleh: ${b.guestName.trim()}]\n\n${b.description.trim()}`
+      if ((urgentDeadline && Number.isNaN(urgentDeadline.getTime())) || (scheduledAt && Number.isNaN(scheduledAt.getTime()))) return json(res, 400, { error: 'Tanggal tidak valid' })
+      const guestName = b.guestName.trim().slice(0, 120)
       const conn = await pool.getConnection()
       try {
         await conn.beginTransaction()
         const [result] = await conn.execute(
-          'INSERT INTO tasks(title,description,priority,urgent_deadline,scheduled_at,creator_id,division_id,assignee_id,location_name,address,latitude,longitude,reference_photo) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
-          [b.title.trim(), desc, b.priority, urgentDeadline, scheduledAt, adminUser.id, divisionId, assigneeId, b.locationName.trim(), b.address.trim(), lat, lng, b.referencePhoto || null]
+          'INSERT INTO tasks(title,description,priority,urgent_deadline,scheduled_at,creator_id,guest_creator_name,division_id,assignee_id,location_name,address,latitude,longitude,reference_photo) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+          [b.title.trim(), b.description.trim(), b.priority, urgentDeadline, scheduledAt, adminUser.id, guestName, divisionId, assigneeId, b.locationName.trim(), b.address.trim(), lat, lng, b.referencePhoto || null]
         )
         await conn.execute("INSERT INTO task_events(task_id,actor_id,event_type) VALUES(?,?,'TASK_CREATED')", [result.insertId, adminUser.id])
-        await conn.commit()
-        const task = await getTask(result.insertId)
-        // notify driver
-        const [admins] = await pool.query("SELECT id FROM users WHERE role='ADMIN' AND active=TRUE")
+        const [admins] = await conn.query("SELECT id FROM users WHERE role='ADMIN' AND active=TRUE")
         const recipientIds = new Set([assigneeId, ...admins.map(a => Number(a.id))])
         const msg = `Tugas baru dari ${b.guestName.trim()}: ${b.title.trim()}`
         for (const uid of recipientIds) {
           await conn.execute('INSERT INTO notifications(user_id,type,task_id,message) VALUES(?,?,?,?)', [uid, 'TASK_CREATED', result.insertId, msg])
         }
+        await conn.commit()
+        const task = await getTask(result.insertId)
         broadcast([...recipientIds], 'notification', { type: 'TASK_CREATED', taskId: result.insertId, message: msg })
         broadcast([...recipientIds], 'task_updated', { task })
         return json(res, 201, { ok: true, taskId: Number(result.insertId) })
@@ -267,6 +368,7 @@ export async function handler(req, res) {
 
     // ── auth ─────────────────────────────────────────────────────────────────
     if (req.method === 'POST' && p === '/api/auth/login') {
+      rateLimit(req, 'login', 10, 15 * 60 * 1000)
       const { username, password } = await readBody(req)
       if (typeof username !== 'string' || typeof password !== 'string')
         return json(res, 400, { error: 'Username dan password wajib' })
@@ -277,6 +379,10 @@ export async function handler(req, res) {
       const user = rows[0]
       if (!user || !await verifyPassword(password, user.password_hash))
         return json(res, 401, { error: 'Username atau password salah' })
+      if (user.role === 'STAFF') {
+        const [[guestRow]] = await pool.query("SELECT val FROM app_settings WHERE setting_key='guest_mode'")
+        if (guestRow?.val === 'true') return json(res, 403, { error: 'Staff menggunakan form utama tanpa login' })
+      }
       const token = createToken()
       await pool.execute(
         'INSERT INTO sessions(user_id,token_hash,expires_at) VALUES(?,?,DATE_ADD(CURRENT_TIMESTAMP(3),INTERVAL 12 HOUR))',
@@ -491,67 +597,25 @@ export async function handler(req, res) {
     }
 
     // ── upload foto (Google Cloud Storage) ───────────────────────────────────
-    if (req.method === 'POST' && p === '/api/upload') {
-      const user = await requireUser(req)
-      // baca multipart manual — ambil content-type dari header
-      const ct = req.headers['content-type'] || ''
-      if (!ct.includes('multipart/form-data')) return json(res, 400, { error: 'Harus multipart/form-data' })
-
-      if (!gcs || !gcsBucket) {
-        return json(res, 200, { url: null, placeholder: true, message: 'GCS belum dikonfigurasi.' })
+    if (req.method === 'POST' && (p === '/api/upload' || p === '/api/public/upload')) {
+      let owner
+      if (p === '/api/public/upload') {
+        rateLimit(req, 'guest-upload', 10, 60 * 60 * 1000)
+        const [[guestRow]] = await pool.query("SELECT val FROM app_settings WHERE setting_key='guest_mode'")
+        if (!guestRow || guestRow.val !== 'true') return json(res, 403, { error: 'Guest mode tidak aktif' })
+        owner = 'guest'
+      } else {
+        const user = await requireUser(req)
+        rateLimit(req, 'upload', 30, 60 * 60 * 1000)
+        owner = user.id
       }
-
-      // parse boundary
-      const boundary = ct.split('boundary=')[1]?.trim()
-      if (!boundary) return json(res, 400, { error: 'Boundary tidak ditemukan' })
-
-      const chunks = []; let size = 0
-      for await (const chunk of req) {
-        size += chunk.length
-        if (size > 10_000_000) return json(res, 413, { error: 'File terlalu besar (max 10MB)' })
-        chunks.push(chunk)
-      }
-      const buf = Buffer.concat(chunks)
-      const boundaryBuf = Buffer.from(`--${boundary}`)
-      const parts = []
-      let start = 0
-      while (start < buf.length) {
-        const idx = buf.indexOf(boundaryBuf, start)
-        if (idx === -1) break
-        const end = buf.indexOf(boundaryBuf, idx + boundaryBuf.length)
-        const part = buf.slice(idx + boundaryBuf.length, end === -1 ? buf.length : end)
-        if (part.length > 4) parts.push(part)
-        start = idx + boundaryBuf.length
-      }
-
-      let fileData = null; let filename = 'upload'; let contentType = 'application/octet-stream'; let photoType = 'COMPLETION'
-      for (const part of parts) {
-        const headerEnd = part.indexOf('\r\n\r\n')
-        if (headerEnd === -1) continue
-        const header = part.slice(0, headerEnd).toString()
-        const body = part.slice(headerEnd + 4, part.length - 2)
-        if (header.includes('name="photoType"')) { photoType = body.toString().trim(); continue }
-        if (header.includes('filename=')) {
-          const fnMatch = header.match(/filename="([^"]+)"/)
-          if (fnMatch) filename = fnMatch[1]
-          const ctMatch = header.match(/Content-Type:\s*(\S+)/i)
-          if (ctMatch) contentType = ctMatch[1].trim()
-          fileData = body
-        }
-      }
-
-      if (!fileData) return json(res, 400, { error: 'File tidak ditemukan' })
-      if (!['REFERENCE', 'COMPLETION'].includes(photoType)) return json(res, 400, { error: 'photoType tidak valid' })
-
-      const ext = filename.split('.').pop()
-      const key = `${photoType.toLowerCase()}/${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+      if (!gcs || !gcsBucket) return json(res, 503, { error: 'Penyimpanan foto belum dikonfigurasi' })
+      const { fileData, photoType, contentType, ext } = await readUpload(req)
+      if (p === '/api/public/upload' && photoType !== 'REFERENCE') return json(res, 400, { error: 'Guest hanya dapat upload foto referensi' })
+      const key = `${photoType.toLowerCase()}/${owner}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
       const file = gcsBucket.file(key)
       await file.save(fileData, { contentType, resumable: false })
-      // uniform bucket-level access — gunakan signed URL untuk akses publik
-      const [signedUrl] = await file.getSignedUrl({
-        action: 'read',
-        expires: Date.now() + 365 * 24 * 60 * 60 * 1000, // 1 tahun
-      })
+      const [signedUrl] = await file.getSignedUrl({ action: 'read', expires: Date.now() + 7 * 24 * 60 * 60 * 1000 })
       return json(res, 200, { url: signedUrl, key })
     }
 
@@ -773,6 +837,33 @@ export async function handler(req, res) {
         await pool.execute(`UPDATE users SET ${sets.join(',')} WHERE id=?`, params)
         return json(res, 200, { ok: true })
       }
+      if (req.method === 'DELETE') {
+        if (targetId === user.id) return json(res, 400, { error: 'Akun yang sedang digunakan tidak dapat dihapus' })
+        const [[target]] = await pool.execute('SELECT role FROM users WHERE id=?', [targetId])
+        if (!target) return json(res, 404, { error: 'Pengguna tidak ditemukan' })
+        if (target.role === 'ADMIN') {
+          const [[adminCount]] = await pool.query("SELECT COUNT(*) total FROM users WHERE role='ADMIN' AND active=TRUE")
+          if (Number(adminCount.total) <= 1) return json(res, 400, { error: 'Admin aktif terakhir tidak dapat dihapus' })
+        }
+        const conn = await pool.getConnection()
+        try {
+          await conn.beginTransaction()
+          await conn.execute('DELETE n FROM notifications n JOIN tasks t ON t.id=n.task_id WHERE t.creator_id=? OR t.assignee_id=?', [targetId, targetId])
+          await conn.execute('DELETE te FROM task_events te JOIN tasks t ON t.id=te.task_id WHERE t.creator_id=? OR t.assignee_id=?', [targetId, targetId])
+          await conn.execute('DELETE dl FROM driver_locations dl JOIN tasks t ON t.id=dl.task_id WHERE t.creator_id=? OR t.assignee_id=?', [targetId, targetId])
+          await conn.execute('UPDATE driver_last_location dll JOIN tasks t ON t.id=dll.task_id SET dll.task_id=NULL WHERE t.creator_id=? OR t.assignee_id=?', [targetId, targetId])
+          await conn.execute('DELETE FROM tasks WHERE creator_id=? OR assignee_id=?', [targetId, targetId])
+          await conn.execute('UPDATE tasks SET cancelled_by=NULL WHERE cancelled_by=?', [targetId])
+          await conn.execute('DELETE FROM task_events WHERE actor_id=?', [targetId])
+          await conn.execute('DELETE FROM notifications WHERE user_id=?', [targetId])
+          await conn.execute('DELETE FROM driver_locations WHERE driver_id=?', [targetId])
+          await conn.execute('DELETE FROM driver_last_location WHERE driver_id=?', [targetId])
+          await conn.execute('DELETE FROM sessions WHERE user_id=?', [targetId])
+          await conn.execute('DELETE FROM users WHERE id=?', [targetId])
+          await conn.commit()
+          return json(res, 200, { ok: true })
+        } catch (e) { await conn.rollback(); throw e } finally { conn.release() }
+      }
     }
 
     // ── admin: division management ────────────────────────────────────────────
@@ -806,6 +897,23 @@ export async function handler(req, res) {
         params.push(divId)
         await pool.execute(`UPDATE divisions SET ${sets.join(',')} WHERE id=?`, params)
         return json(res, 200, { ok: true })
+      }
+      if (req.method === 'DELETE') {
+        const conn = await pool.getConnection()
+        try {
+          await conn.beginTransaction()
+          const [[division]] = await conn.execute('SELECT id FROM divisions WHERE id=? FOR UPDATE', [divId])
+          if (!division) { await conn.rollback(); return json(res, 404, { error: 'Divisi tidak ditemukan' }) }
+          await conn.execute('DELETE n FROM notifications n JOIN tasks t ON t.id=n.task_id WHERE t.division_id=?', [divId])
+          await conn.execute('DELETE te FROM task_events te JOIN tasks t ON t.id=te.task_id WHERE t.division_id=?', [divId])
+          await conn.execute('DELETE dl FROM driver_locations dl JOIN tasks t ON t.id=dl.task_id WHERE t.division_id=?', [divId])
+          await conn.execute('UPDATE driver_last_location dll JOIN tasks t ON t.id=dll.task_id SET dll.task_id=NULL WHERE t.division_id=?', [divId])
+          await conn.execute('DELETE FROM tasks WHERE division_id=?', [divId])
+          await conn.execute('UPDATE users SET division_id=NULL WHERE division_id=?', [divId])
+          await conn.execute('DELETE FROM divisions WHERE id=?', [divId])
+          await conn.commit()
+          return json(res, 200, { ok: true })
+        } catch (e) { await conn.rollback(); throw e } finally { conn.release() }
       }
     }
 

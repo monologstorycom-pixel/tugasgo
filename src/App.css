@@ -37,7 +37,7 @@ a { color: var(--green) }
 
 /* ─── logo ────────────────────────────────────────── */
 .logo { display: block; object-fit: contain }
-.logo-wordmark { width: 148px; height: 40px }
+.logo-wordmark { width: 176px; height: auto }
 .logo-icon { width: 36px; height: 36px }
 .logo-lockup { width: 200px; height: 76px }
 
@@ -86,7 +86,7 @@ a { color: var(--green) }
 .avatar-active { background: var(--green); color: white }
 
 /* ─── buttons ─────────────────────────────────────── */
-.primary, .secondary {
+.primary, .secondary, .danger {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -239,7 +239,10 @@ a { color: var(--green) }
 .profile > button:hover { color: var(--ink) }
 .profile .avatar { background: var(--green-light); color: var(--green) }
 
-.workspace { grid-column: 2 }
+.workspace { grid-column: 2; background: linear-gradient(180deg, #edf5f0 0, var(--bg) 360px) }
+.shell aside { background: linear-gradient(180deg, #ffffff 0%, #f7faf8 72%, #eef5f0 100%) }
+.shell aside nav button.active { background: var(--green); color: white; box-shadow: 0 5px 14px rgba(23,107,70,.16) }
+.shell aside nav button.active svg { color: var(--lime) }
 .workspace > header {
   height: 58px;
   border-bottom: 1px solid var(--line);
@@ -252,7 +255,7 @@ a { color: var(--green) }
   top: 0;
   z-index: 40;
 }
-.header-right { display: flex; align-items: center; gap: 10px }
+.header-right { display: flex; align-items: center; gap: 10px; margin-right: auto }
 .live { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; font-weight: 500 }
 .live i { width: 7px; height: 7px; border-radius: 50%; background: #27ae60; flex-shrink: 0 }
 .mobile-logo, .mobile-exit, .bottom-nav { display: none }
@@ -273,7 +276,7 @@ a { color: var(--green) }
   min-width: 15px; text-align: center; line-height: 1.5;
 }
 .notif-panel {
-  position: absolute; top: calc(100% + 6px); right: 0;
+  position: absolute; top: calc(100% + 6px); left: 0;
   width: 290px; max-height: 380px; overflow-y: auto;
   background: var(--paper);
   border: 1px solid var(--line);
@@ -303,11 +306,12 @@ a { color: var(--green) }
 .back { border: 0; background: none; color: var(--green); padding: 4px 0; margin-bottom: 18px; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 4px }
 
 /* ─── panel ───────────────────────────────────────── */
-.panel { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow) }
+.panel { background: var(--paper); border: 1px solid #dce5df; border-radius: var(--radius); box-shadow: 0 8px 24px rgba(24,57,39,.06) }
 .section-title {
   padding: 16px 20px;
   border-bottom: 1px solid var(--line);
   display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  background: linear-gradient(90deg, #f4f9f6, #ffffff);
 }
 .section-title h2 { font-size: 15px; font-weight: 700 }
 .section-title p { font-size: 12px; color: var(--muted); margin-top: 2px }
@@ -324,10 +328,12 @@ a { color: var(--green) }
   overflow: hidden;
 }
 .stats > div {
+  position: relative;
   padding: 18px 20px;
   border-right: 1px solid var(--line);
   min-width: 0;
 }
+.stats > div::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--green) }
 .stats > div:last-child { border-right: 0 }
 .stats small { display: block; font-size: 10px; font-weight: 700; letter-spacing: .8px; color: var(--muted); margin-bottom: 4px }
 .stats strong { font: 700 26px 'Manrope'; display: block; color: var(--ink) }
@@ -336,6 +342,28 @@ a { color: var(--green) }
 .admin-stats { grid-template-columns: repeat(2, 1fr) }
 @media (min-width: 760px) { .admin-stats { grid-template-columns: repeat(4, 1fr) } }
 @media (min-width: 1100px) { .admin-stats { grid-template-columns: repeat(8, 1fr) } }
+
+/* ─── guest mode ──────────────────────────────────── */
+.guest-shell { --guest-deep: #0f3f2b; --guest-mid: #176b46; --guest-soft: #e7f2eb }
+.guest-shell .workspace { background: radial-gradient(circle at 92% 4%, rgba(216,240,109,.18), transparent 260px), linear-gradient(180deg, #edf5f0 0, var(--bg) 360px) }
+.guest-shell aside { background: linear-gradient(180deg, #ffffff 0%, #f6faf7 72%, #edf6f0 100%) }
+.guest-shell aside nav button.active { background: var(--green); color: white; box-shadow: 0 5px 14px rgba(23,107,70,.18) }
+.guest-shell aside nav button.active svg { color: var(--lime) }
+.guest-shell .workspace > header { background: rgba(255,255,255,.82); backdrop-filter: blur(12px) }
+.guest-task-row { cursor: default }
+.guest-task-row:hover { background: var(--paper) }
+.guest-profile a { color: #8c9690; font-size: 18px; text-align: center; text-decoration: none }
+.guest-profile a:hover { color: var(--ink) }
+.guest-hero, .guest-activity-hero { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 28px 30px; margin-bottom: 18px; border-radius: 18px; color: white; background: linear-gradient(135deg, var(--guest-deep), var(--guest-mid)); box-shadow: 0 16px 36px rgba(15,63,43,.16) }
+.guest-hero .eyebrow, .guest-activity-hero .eyebrow { color: var(--lime) }
+.guest-hero h1, .guest-activity-hero h1 { font-size: clamp(24px, 4vw, 34px); margin-bottom: 6px }
+.guest-hero p:not(.eyebrow), .guest-activity-hero p:not(.eyebrow) { color: #bed6c8; font-size: 14px; line-height: 1.55 }
+.guest-activity-hero .live-indicator { border: 1px solid rgba(216,240,109,.25); color: var(--lime); background: rgba(0,0,0,.12) }
+.guest-activity-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px }
+.guest-activity-stats > div { position: relative; overflow: hidden; padding: 17px 18px; border: 1px solid #d9e6de; border-radius: 13px; background: rgba(255,255,255,.88); box-shadow: var(--shadow) }
+.guest-activity-stats > div::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--green) }
+.guest-activity-stats small { display: block; color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .7px; margin-bottom: 4px }
+.guest-activity-stats strong { color: var(--green); font: 800 26px 'Manrope' }
 
 /* ─── task row ────────────────────────────────────── */
 .task-list { display: grid }
@@ -446,6 +474,32 @@ a { color: var(--green) }
 .danger { background: var(--red-light); color: var(--red) }
 .danger:hover:not(:disabled) { background: #fce4e1 }
 
+/* ─── guest create form ───────────────────────────── */
+.guest-form-intro { color: var(--muted); font-size: 14px; margin-top: 4px }
+.guest-create-form { padding: 28px; gap: 20px; border-color: #d8e1db; box-shadow: 0 12px 32px rgba(24,57,39,.09); background: linear-gradient(180deg, #fff, #fcfefc) }
+.guest-activity-page > .panel { border-color: #d8e5dc; box-shadow: 0 10px 28px rgba(24,57,39,.07) }
+.guest-activity-page .section-title { background: linear-gradient(90deg, #f4faf6, #fff) }
+.guest-create-form > label { gap: 8px }
+.guest-create-form > label:not(.guest-file-picker) > input,
+.guest-create-form > label > select,
+.guest-create-form > label > textarea,
+.guest-create-form .form-grid input,
+.guest-create-form .form-grid select { background: #fbfcfb; border-color: #d5ded8; min-height: 48px }
+.guest-create-form textarea { resize: vertical; min-height: 110px }
+.guest-create-form .map-placeholder { min-height: 112px }
+.guest-create-form .form-actions { margin: 2px -28px -28px; padding: 18px 28px; border-top: 1px solid var(--line); background: #f8faf9; border-radius: 0 0 var(--radius) var(--radius) }
+.guest-create-form .form-actions button { min-width: 130px }
+.guest-file-picker { grid-template-columns: 48px minmax(0, 1fr) auto !important; align-items: center; gap: 12px !important; min-height: 92px; padding: 16px; border: 1.5px dashed #aac6b5; border-radius: var(--radius); background: #f8fcf9; cursor: pointer; transition: border-color .15s, background .15s, box-shadow .15s }
+.guest-file-picker:hover { border-color: var(--green); background: var(--green-light) }
+.guest-file-picker:focus-within { border-color: var(--green); box-shadow: 0 0 0 3px rgba(23,107,70,.12) }
+.guest-file-picker.has-file { border-style: solid; border-color: #9bc2aa; background: var(--green-light) }
+.guest-file-picker input { position: absolute; width: 1px !important; height: 1px; opacity: 0; pointer-events: none }
+.guest-file-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 12px; color: var(--green); background: var(--paper); border: 1px solid #cde0d3 }
+.guest-file-copy { display: grid; gap: 3px; min-width: 0 }
+.guest-file-copy b { color: var(--ink); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.guest-file-copy small { color: var(--muted); font-size: 12px; font-weight: 400 }
+.guest-file-action { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 14px; border-radius: var(--radius-sm); color: var(--green); background: var(--paper); border: 1px solid #bfd5c7; font-size: 12px; font-weight: 700 }
+
 /* ─── photos ──────────────────────────────────────── */
 .upload {
   display: grid; place-items: center; align-content: center; gap: 6px;
@@ -539,6 +593,7 @@ a { color: var(--green) }
 .driver-loc-row > div { flex: 1; min-width: 0; display: grid; gap: 3px }
 .driver-loc-row b { font-size: 14px; font-weight: 600 }
 .driver-loc-row small { color: var(--muted); font-size: 12px }
+.driver-task-detail { color: var(--ink); font-size: 12px; line-height: 1.45 }
 
 /* ─── live map ────────────────────────────────────── */
 .live-map-wrap { position: relative }
@@ -632,6 +687,7 @@ label.upload { display: grid }
     position: sticky; top: 0; z-index: 50;
   }
   .mobile-logo { display: block }
+  .header-right { margin-left: auto; margin-right: 0 }
   .mobile-exit {
     display: block; border: 0; background: none;
     color: var(--green); font-weight: 600; font-size: 14px;
@@ -726,7 +782,7 @@ label.upload { display: grid }
   .map-embed { margin: 10px 0 }
 
   /* notif panel */
-  .notif-panel { width: min(280px, calc(100vw - 24px)); right: -8px }
+  .notif-panel { width: min(280px, calc(100vw - 24px)); left: auto; right: -8px }
 
   /* driver rows */
   .driver-loc-row { flex-wrap: wrap; gap: 8px }
@@ -741,18 +797,70 @@ label.upload { display: grid }
   .tab-bar { width: 100% }
   .tab-bar button { flex: 1 }
 
-  /* admin user row */
-  .user-row { flex-wrap: wrap; gap: 8px }
-  .user-row > div:not(.badge) { flex-basis: calc(100% - 50px) }
+  /* admin */
+  .admin-page-subtitle { font-size: 13px }
+  .admin-tabs { width: calc(100vw - 28px); margin-bottom: 14px }
+  .admin-tabs button { flex: 0 0 auto; padding: 10px 15px }
+  .admin-page .section-title { min-height: 0; align-items: flex-start }
+  .admin-page .section-title > button { min-height: 42px }
+  .admin-page .inline-form .form-grid { grid-template-columns: 1fr }
+  .admin-page .user-list, .driver-status-list { padding-left: 14px; padding-right: 14px }
+  .user-row { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 8px 10px }
+  .user-row > div:not(.badge):not(.user-row-actions) { min-width: 0 }
+  .user-row-actions { grid-column: 1 / -1; width: 100%; display: grid; grid-template-columns: 1fr 1fr }
+  .user-row-actions button { width: 100% }
+  .user-row > button { grid-column: 1 / -1; width: 100%; min-height: 42px }
+  .admin-row-actions { grid-column: 1 / -1; width: 100%; display: grid; grid-template-columns: 1fr 1fr }
+  .admin-row-actions button { width: 100%; min-height: 42px }
+  .admin-error { margin: 12px 14px 0 }
+  .driver-status-row { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 8px 10px }
+  .driver-status-info { min-width: 0 }
+  .driver-status-row > button { grid-column: 1 / -1; width: 100%; min-height: 42px !important }
+  .settings-row { align-items: flex-start; padding: 16px 14px; gap: 12px }
+  .settings-row > button { min-height: 44px }
+  .guest-link-box { grid-template-columns: 1fr; margin: 0 14px 14px }
+  .guest-link-box small { grid-column: auto }
+  .guest-link-box button { width: 100%; min-height: 42px }
 
   /* scheduled notice */
   .scheduled-notice { padding: 10px 12px; gap: 10px }
   .scheduled-notice span { font-size: 18px }
+
+  /* guest mode */
+  .guest-task-row .badge { align-self: center }
 }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important }
 }
+
+/* ── admin page ──────────────────────────────────── */
+.admin-page { max-width: 1080px }
+.admin-page-subtitle { color: var(--muted); font-size: 14px; margin-top: 4px }
+.admin-tabs { max-width: 100%; overflow-x: auto; scrollbar-width: none }
+.admin-tabs::-webkit-scrollbar { display: none }
+.admin-tabs button { min-height: 44px; flex-shrink: 0; cursor: pointer }
+.admin-page .panel { overflow: hidden }
+.admin-page .section-title { min-height: 68px }
+.admin-page .section-title > div { min-width: 0 }
+.admin-page .section-title > button { flex-shrink: 0 }
+.admin-page .inline-form { border-bottom: 1px solid var(--line) }
+.admin-page .inline-form .form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) }
+.admin-page .user-list { padding-top: 4px }
+.admin-page .user-row > div:not(.badge):not(.user-row-actions) { overflow-wrap: anywhere }
+.admin-page .user-row-actions button { min-height: 38px; padding: 7px 12px !important }
+.admin-row-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0 }
+.admin-row-actions button { min-height: 38px; padding: 7px 12px; font-size: 12px }
+.admin-error { margin: 14px 20px 0 }
+.settings-list { display: grid }
+.settings-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 20px }
+.settings-row > div { display: grid; gap: 5px; min-width: 0 }
+.settings-row b { font-size: 14px }
+.settings-row small { color: var(--muted); font-size: 12px; line-height: 1.5 }
+.settings-row code, .guest-link-box code { overflow-wrap: anywhere }
+.guest-link-box { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px 12px; margin: 0 20px 20px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #f8faf9 }
+.guest-link-box small { grid-column: 1 / -1; color: var(--muted) }
+.guest-link-box code { min-width: 0; color: var(--green); font-size: 12px }
 
 /* ── driver status (admin) ───────────────────────── */
 .driver-status-list { display: grid; gap: 0; padding: 0 20px 8px }
@@ -796,3 +904,63 @@ label.upload { display: grid }
 .scheduled-notice div { display: grid; gap: 2px }
 .scheduled-notice b { font-size: 13px; color: var(--orange) }
 .scheduled-notice small { font-size: 12px; color: var(--muted) }
+
+/* ── responsive hardening ─────────────────────────── */
+.primary, .secondary, .danger,
+.form input, .form select, .form textarea,
+.filters select, .search-input, .date-input, .places-input,
+.dev-login-btns button { min-height: 44px }
+.form label, .form input, .form select, .form textarea { min-width: 0; max-width: 100% }
+.form input[type="file"] { width: 100% }
+.back { min-height: 44px; padding: 10px 0 }
+.notif-bell, .notif-panel-head button { min-width: 44px; min-height: 44px }
+.mobile-exit { min-height: 44px; padding: 0 8px }
+.profile { grid-template-columns: 38px minmax(0, 1fr) 44px }
+.profile > button, .guest-profile a { width: 44px; height: 44px; display: grid; place-items: center }
+.task-title-row b, .task-sub, .task-schedule, .task-deadline,
+.notif-item span, .detail h1, .detail-grid b, .detail-grid span,
+.meta-block span, .instruction p, .done-box p, .cancelled-box p,
+.event b, .event p, .driver-loc-row b, .driver-loc-row small,
+.driver-task-detail, .division-table b { overflow-wrap: anywhere }
+.detail-top, .detail-grid > div, .meta-block > div, .instruction,
+.done-box, .cancelled-box, .event > div, .map-placeholder > div,
+.selected-place, .division-table > div > * { min-width: 0 }
+.map-placeholder b, .map-placeholder small, .selected-place b,
+.selected-place span, .selected-place small { overflow-wrap: anywhere }
+.task-filters { padding: 12px 20px 0; border-bottom: 0 }
+.table-wrap { overflow-x: auto; overscroll-behavior-inline: contain; -webkit-overflow-scrolling: touch }
+.driver-report-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 20px }
+.driver-report-stats strong { overflow-wrap: anywhere }
+.driver-report-table td:first-child, .driver-report-table td:nth-child(2), .driver-report-table td:last-child { max-width: 240px; overflow-wrap: anywhere }
+.report-photo-link { display: inline-flex; align-items: center; min-height: 44px; padding-inline: 4px; color: var(--blue); font-size: 11px }
+.admin-page .user-row-actions button, .admin-row-actions button { min-height: 44px }
+
+@media (max-width: 768px) {
+  .workspace { padding-bottom: calc(68px + env(safe-area-inset-bottom)) }
+  .bottom-nav { height: calc(60px + env(safe-area-inset-bottom)) }
+  .bottom-nav button { min-height: 44px }
+  .driver-report-stats { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+  .task-filters { padding: 10px 14px 0 }
+  .guest-hero, .guest-activity-hero { padding: 22px 18px; border-radius: 14px; align-items: flex-start }
+  .guest-activity-hero { flex-direction: column }
+  .guest-activity-stats { gap: 6px }
+  .guest-activity-stats > div { padding: 13px 10px }
+  .guest-activity-stats strong { font-size: 22px }
+  .guest-activity-stats small { font-size: 8px }
+  .guest-create-form { padding: 18px 14px; gap: 16px }
+  .guest-create-form .form-actions { margin: 2px -14px -18px; padding: 14px; border-radius: 0 0 10px 10px }
+  .guest-create-form .form-actions button { min-width: 0 }
+  .guest-file-picker { grid-template-columns: 44px minmax(0, 1fr) !important; min-height: 96px; padding: 14px }
+  .guest-file-icon { width: 44px; height: 44px }
+  .guest-file-action { grid-column: 1 / -1; width: 100%; min-height: 44px }
+  .guest-file-copy b { white-space: normal; overflow-wrap: anywhere }
+  .admin-page .inline-form .form-grid { grid-template-columns: 1fr }
+}
+
+@media (max-width: 375px) {
+  .meta-block { grid-template-columns: 1fr }
+  .admin-page .section-title { flex-wrap: wrap }
+  .admin-page .section-title > button { width: 100% }
+  .settings-row { flex-direction: column }
+  .settings-row > button { width: 100%; min-width: 0 !important }
+}

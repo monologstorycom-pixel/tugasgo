@@ -7,7 +7,9 @@ declare global {
   interface Window { google: typeof google; __loadGoogleMaps: (key: string) => void }
 }
 
-function LiveMap({ driverLocations, tasks }: { driverLocations: DriverLocation[]; tasks: Task[] }) {
+const escapeHtml = (value: string) => value.replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]!)
+
+export function LiveMap({ driverLocations, tasks }: { driverLocations: DriverLocation[]; tasks: Task[] }) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapRef2 = useRef<google.maps.Map | null>(null)
   const markers = useRef<Map<number, google.maps.Marker>>(new Map())
@@ -35,19 +37,24 @@ function LiveMap({ driverLocations, tasks }: { driverLocations: DriverLocation[]
       const pos = { lat: dl.latitude, lng: dl.longitude }
       const activeTask = tasks.find(t => t.id === dl.taskId)
       const isActive = !!dl.taskId
+      const taskTitle = activeTask?.title || dl.taskTitle
+      const requester = activeTask?.requester || dl.requester
+      const destination = activeTask?.destination || dl.destination
       const icon = { path: window.google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: isActive ? '#176b46' : '#a2aaa5', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 }
-      if (markers.current.has(dl.driverId)) {
-        markers.current.get(dl.driverId)!.setPosition(pos)
-        markers.current.get(dl.driverId)!.setIcon(icon)
+      let marker = markers.current.get(dl.driverId)
+      if (marker) {
+        marker.setPosition(pos)
+        marker.setIcon(icon)
+        window.google.maps.event.clearListeners(marker, 'click')
       } else {
-        const marker = new window.google.maps.Marker({ position: pos, map: mapRef2.current!, title: dl.driverName, icon, label: { text: dl.driverName[0], color: '#fff', fontSize: '12px', fontWeight: '700' }, animation: window.google.maps.Animation.DROP })
-        marker.addListener('click', () => {
-          const minsAgo = Math.round((Date.now() - dl.updatedAt) / 60000)
-          infoWindow.current?.setContent(`<div style="font-family:sans-serif;min-width:160px"><b>${dl.driverName}</b><br/><span style="font-size:12px;color:#666">${isActive ? 'Sedang bertugas' : 'Idle'}</span>${activeTask ? `<br/><span style="font-size:12px">${activeTask.title}</span>` : ''}<br/><span style="font-size:11px;color:#999">${minsAgo < 1 ? 'baru saja' : `${minsAgo}m lalu`}</span></div>`)
-          infoWindow.current?.open(mapRef2.current!, marker)
-        })
+        marker = new window.google.maps.Marker({ position: pos, map: mapRef2.current!, title: dl.driverName, icon, label: { text: dl.driverName[0], color: '#fff', fontSize: '12px', fontWeight: '700' }, animation: window.google.maps.Animation.DROP })
         markers.current.set(dl.driverId, marker)
       }
+      marker.addListener('click', () => {
+        const minsAgo = Math.round((Date.now() - dl.updatedAt) / 60000)
+        infoWindow.current?.setContent(`<div style="font-family:sans-serif;max-width:220px;overflow-wrap:anywhere"><b>${escapeHtml(dl.driverName)}</b><br/><span style="font-size:12px;color:#666">${isActive ? 'Sedang bertugas' : 'Idle'}</span>${taskTitle ? `<br/><strong style="font-size:12px">${escapeHtml(taskTitle)}</strong>` : ''}${requester ? `<br/><span style="font-size:12px">Untuk: ${escapeHtml(requester)}</span>` : ''}${destination ? `<br/><span style="font-size:12px">Tujuan: ${escapeHtml(destination)}</span>` : ''}<br/><span style="font-size:11px;color:#999">${minsAgo < 1 ? 'baru saja' : `${minsAgo}m lalu`}</span></div>`)
+        infoWindow.current?.open(mapRef2.current!, marker)
+      })
     })
     markers.current.forEach((m, id) => { if (!driverLocations.find(d => d.driverId === id)) { m.setMap(null); markers.current.delete(id) } })
     if (driverLocations.length > 1) {
@@ -57,7 +64,7 @@ function LiveMap({ driverLocations, tasks }: { driverLocations: DriverLocation[]
     }
   }, [driverLocations, tasks])
 
-  if (!import.meta.env.VITE_GOOGLE_MAPS_KEY) return <div className="map-placeholder" style={{ height: 320 }}><span>⌖</span><div><b>Maps key belum diset</b></div></div>
+  if (!import.meta.env.VITE_GOOGLE_MAPS_KEY) return <div className="map-placeholder live-map"><span>⌖</span><div><b>Maps key belum diset</b></div></div>
 
   return (
     <div className="live-map-wrap">
