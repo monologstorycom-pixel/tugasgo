@@ -5,22 +5,32 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:all": "concurrently -n API,WEB -c green,cyan \"node --env-file=.env server/app.mjs\" \"vite\"",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b --pretty false",
     "lint": "oxlint src",
-    "test": "node check-sort.mjs",
+    "test": "node check-sort.mjs && node --test server/*.test.mjs",
+    "server": "node server/app.mjs",
+    "db:migrate": "node server/migrate.mjs",
+    "db:seed": "node server/seed.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@google-cloud/storage": "^8.2.0",
+    "exceljs": "^4.4.0",
+    "mysql2": "^3.24.4",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/google.maps": "^3.66.3",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^10.0.5",
     "eslint": "^10.11.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.7",

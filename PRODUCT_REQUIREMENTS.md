@@ -88,7 +88,7 @@ Field:
 - Reference photo.
 - Location: location_name, address, latitude, longitude.
 
-URGENT adalah prioritas pengerjaan, bukan deadline.
+URGENT adalah prioritas pengerjaan. Untuk tugas URGENT, staff dapat menentukan estimasi batas waktu penyelesaian. Jika tugas URGENT belum selesai melewati estimasi tersebut, sistem menampilkan warning visual. Driver tetap dapat mengerjakan kapanpun, namun sistem memberi tanda visual bahwa waktu estimasi sudah terlewat.
 
 ## 7. Status dan Urutan Task
 

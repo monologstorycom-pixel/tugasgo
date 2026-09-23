@@ -1,94 +1,135 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import './App.css'
 
-type Role = 'Staff' | 'Driver' | 'Admin'
-type Status = 'WAITING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
-type Priority = 'NORMAL' | 'URGENT'
-type Task = {
-  id:number; title:string; priority:Priority; status:Status; created:number; requester:string; division:string
-  assignee:string; destination:string; address:string; description:string; referencePhoto?:string
-  startedAt?:number; completedAt?:number; cancelledAt?:number; cancelReason?:string; note?:string; photos?:string[]
-}
-type View = 'dashboard' | 'create' | 'activity' | 'history' | 'detail'
+import type { SessionUser, Task, DriverOption, Division, DriverLocation, Notification, View, TaskDraft } from './types'
+import { request, roleName } from './lib/api'
+import { useWebSocket } from './lib/hooks'
 
-const now = Date.now()
-const seed: Task[] = [
-  { id:1, title:'Beli Kabel LAN', priority:'NORMAL', status:'WAITING', created:now-1000*60*60*5, requester:'Andi Purchasing', division:'Purchasing', assignee:'Risen Driver', destination:'Toko Sumber Network', address:'Jl. Ngagel 88, Surabaya', description:'Beli kabel LAN Cat6 sepanjang 50 meter untuk ruang meeting lantai 2.' },
-  { id:2, title:'Antar Dokumen Kontrak', priority:'URGENT', status:'WAITING', created:now-1000*60*60*9, requester:'Budi Accounting', division:'Accounting', assignee:'Risen Driver', destination:'Kantor Notaris Graha Pena', address:'Jl. Ahmad Yani 88, Surabaya', description:'Antarkan map kontrak bertanda merah. Serahkan langsung kepada Ibu Ratna.', referencePhoto:'map-kontrak.jpg' },
-  { id:3, title:'Ambil Perangkat Service', priority:'NORMAL', status:'IN_PROGRESS', created:now-1000*60*60*2, requester:'Dimas IT', division:'IT', assignee:'Risen Driver', destination:'Service Center WTC', address:'WTC Surabaya lantai 2', description:'Ambil laptop service dengan nomor tiket IT-284.', startedAt:now-1000*742 },
-  { id:4, title:'Kirim Pantry Supply', priority:'NORMAL', status:'COMPLETED', created:now-1000*60*60*29, requester:'Sari GA', division:'GA', assignee:'Risen Driver', destination:'Gudang ASM', address:'Kompleks Pergudangan Margomulyo', description:'Kirim stok pantry ke gudang.', startedAt:now-1000*60*60*25, completedAt:now-1000*60*60*24, note:'Diterima Pak Eko', photos:['bukti-gudang.jpg'] },
-]
+import Login from './components/Login'
+import Shell from './components/Shell'
+import Detail from './pages/Detail'
+import { StaffDashboard, DriverDashboard, AdminOverview, CreateTask } from './pages/Dashboard'
+import Activity from './pages/Activity'
+import History from './pages/History'
+import Report from './pages/Report'
+import DriverReport from './pages/DriverReport'
+import Admin from './pages/Admin'
+import GuestTask from './pages/GuestTask'
 
-const sortDriverTasks = (tasks: Task[]) => [...tasks].filter(t=>t.status!=='COMPLETED'&&t.status!=='CANCELLED').sort((a,b)=>{
-  const rank = (t:Task) => t.status==='IN_PROGRESS' ? 0 : t.priority==='URGENT' ? 1 : 2
-  return rank(a)-rank(b) || a.created-b.created
-})
-const age = (created:number) => { const h=Math.max(1,Math.floor((Date.now()-created)/3600000)); return h<24 ? `${h} jam` : `${Math.floor(h/24)} hari` }
-const waitingAge = (created:number) => { const h=Math.max(1,Math.floor((Date.now()-created)/3600000)); return h<24 ? `${h} jam` : `${Math.floor(h/24)} hari ${h%24} jam` }
-const duration = (seconds:number) => [Math.floor(seconds/3600),Math.floor(seconds%3600/60),seconds%60].map(n=>String(n).padStart(2,'0')).join(':')
-const dateTime = (value:number) => new Intl.DateTimeFormat('id-ID',{dateStyle:'medium',timeStyle:'short'}).format(value)
-const elapsed = (task:Task, clock=Date.now()) => task.startedAt ? Math.max(0,Math.floor(((task.completedAt||task.cancelledAt||clock)-task.startedAt)/1000)) : 0
+const VALID_VIEWS: View[] = ['dashboard', 'create', 'activity', 'history', 'report', 'admin']
 
-function Logo({variant='wordmark'}:{variant?:'wordmark'|'icon'|'lockup'}){ const src={wordmark:'/image/logo.png',icon:'/image/logo1.png',lockup:'/image/logo-real.png'}[variant]; return <img className={`logo logo-${variant}`} src={src} alt="TugasGo"/> }
-function Badge({children,tone='gray'}:{children:React.ReactNode,tone?:string}){return <span className={`badge ${tone}`}>{children}</span>}
+export default function App() {
+  const [user, setUser] = useState<SessionUser | null>(null)
+  const role = user ? roleName(user.role) : null
 
-function Login({onLogin}:{onLogin:(r:Role)=>void}){
- const roles:[Role,string,string][]=[['Staff','Andi Purchasing','Buat dan pantau tugas'],['Driver','Risen Driver','Kerjakan tugas lapangan'],['Admin','Admin','Pantau seluruh aktivitas']]
- return <main className="login"><section className="login-brand"><Logo variant="lockup"/><div><p className="eyebrow">OPERASIONAL HARIAN</p><h1>Tugas beres.<br/>Pergerakan jelas.</h1><p>Koordinasi tugas lapangan antar divisi dalam satu alur yang ringkas.</p></div><small>Prototype internal ASM · Data demo</small></section><section className="login-panel"><div className="login-box"><p className="eyebrow">MASUK MODE DEMO</p><h2>Pilih peran</h2><p className="muted">Tidak memerlukan kata sandi.</p><div className="role-list">{roles.map(([r,n,d])=><button key={r} onClick={()=>onLogin(r)} className="role"><span className="avatar">{n[0]}</span><span><b>{n}</b><small>{r} · {d}</small></span><i>›</i></button>)}</div></div></section></main>
-}
+  const [view, setView] = useState<View>(() => {
+    const hash = window.location.hash.replace('#/', '')
+    return VALID_VIEWS.includes(hash as View) ? hash as View : 'dashboard'
+  })
+  const [returnView, setReturnView] = useState<View>('dashboard')
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [drivers, setDrivers] = useState<DriverOption[]>([])
+  const [divisions, setDivisions] = useState<Division[]>([])
+  const [driverLocations, setDriverLocations] = useState<DriverLocation[]>([])
+  const [selected, setSelected] = useState<Task | null>(null)
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [toast, setToast] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [fatal, setFatal] = useState('')
+  const [wsToken, setWsToken] = useState<string | null>(null)
 
-function Shell({role,view,setView,logout,children}:{role:Role,view:View,setView:(v:View)=>void,logout:()=>void,children:React.ReactNode}){
- const items:Record<Role,[View,string][]>= {Staff:[['dashboard','Ringkasan'],['create','Buat tugas'],['activity','Aktivitas'],['history','Riwayat']],Driver:[['dashboard','Tugas saya'],['activity','Aktivitas'],['history','Riwayat']],Admin:[['dashboard','Overview'],['activity','Aktivitas']]}
- const names={Staff:'Andi Purchasing',Driver:'Risen Driver',Admin:'Admin'}
- return <div className="shell"><aside><Logo/><nav>{items[role].map(([v,l])=><button className={view===v?'active':''} key={v} onClick={()=>setView(v)}><span>{v==='dashboard'?'⌂':v==='create'?'+':v==='activity'?'≡':'↺'}</span>{l}</button>)}</nav><div className="profile"><span className="avatar">{names[role][0]}</span><div><b>{names[role]}</b><small>{role}</small></div><button title="Keluar" onClick={logout}>↗</button></div></aside><div className="workspace"><header><div className="mobile-logo"><Logo variant="icon"/></div><span className="live"><i/> Data prototype lokal</span><button className="mobile-exit" onClick={logout}>Keluar</button></header>{children}<nav className="bottom-nav">{items[role].map(([v,l])=><button className={view===v?'active':''} key={v} onClick={()=>setView(v)}><span>{v==='dashboard'?'⌂':v==='create'?'+':v==='activity'?'≡':'↺'}</span>{l}</button>)}</nav></div></div>
-}
+  const notify = (s: string) => { setToast(s); setTimeout(() => setToast(''), 2400) }
+  const unread = notifications.filter(n => !n.read_at).length
 
-function TaskRow({task,onOpen}:{task:Task,onOpen:(t:Task)=>void}){return <button className="task-row" onClick={()=>onOpen(task)}><span className={`priority-dot ${task.priority.toLowerCase()}`}/><span className="task-main"><span><b>{task.title}</b>{task.status==='IN_PROGRESS'&&<Badge tone="blue">SEDANG DIKERJAKAN</Badge>}{task.status==='CANCELLED'&&<Badge tone="red">DIBATALKAN</Badge>}</span><small>{task.destination} · {task.requester}</small></span><span className="task-meta"><Badge tone={task.priority==='URGENT'?'red':'gray'}>{task.priority}</Badge><small>{task.status==='WAITING'?`Sudah ${waitingAge(task.created)} belum dikerjakan`:`${age(task.created)} lalu`}</small></span><i>›</i></button>}
+  const loadAll = useCallback(async (u: SessionUser) => {
+    const sa = u.role === 'STAFF' || u.role === 'ADMIN'
+    const [t, d, n, act, div] = await Promise.all([
+      request<{ tasks: Task[] }>('/tasks'),
+      sa ? request<{ drivers: DriverOption[] }>('/drivers') : Promise.resolve({ drivers: [] }),
+      request<{ notifications: Notification[] }>('/notifications'),
+      sa ? request<{ tasks: Task[]; driverLocations: DriverLocation[] }>('/activity') : Promise.resolve({ tasks: [], driverLocations: [] }),
+      sa ? request<{ divisions: Division[] }>('/admin/divisions') : Promise.resolve({ divisions: [] }),
+    ])
+    setTasks(t.tasks); setDrivers(d.drivers); setNotifications(n.notifications); setDriverLocations(act.driverLocations); setDivisions(div.divisions)
+  }, [])
 
-function StaffDashboard({tasks,onOpen,setView}:{tasks:Task[],onOpen:(t:Task)=>void,setView:(v:View)=>void}){
- const mine=tasks.filter(t=>t.requester.includes('Andi'))
- return <main className="page"><div className="page-head"><div><p className="eyebrow">SENIN, 21 SEPTEMBER</p><h1>Selamat siang, Andi.</h1><p>Berikut pergerakan tugas dari Purchasing.</p></div><button className="primary" onClick={()=>setView('create')}>+ Buat tugas</button></div><section className="stats"><div><small>TUGAS AKTIF</small><strong>{mine.filter(t=>!['COMPLETED','CANCELLED'].includes(t.status)).length}</strong><p>perlu dipantau</p></div><div><small>SEDANG DIKERJAKAN</small><strong>{mine.filter(t=>t.status==='IN_PROGRESS').length}</strong><p>oleh driver</p></div><div><small>SELESAI</small><strong>{mine.filter(t=>t.status==='COMPLETED').length}</strong><p>hari ini</p></div></section><section className="panel"><div className="section-title"><div><h2>Tugas terbaru</h2><p>Status permintaan dari divisi Anda</p></div></div><div className="task-list">{mine.map(t=><TaskRow key={t.id} task={t} onOpen={onOpen}/>)}</div></section></main>
-}
+  useWebSocket(wsToken, (event, data) => {
+    if (event === 'task_updated') {
+      const updated = (data as { task: Task }).task
+      setTasks(ts => ts.some(t => t.id === updated.id) ? ts.map(t => t.id === updated.id ? updated : t) : [updated, ...ts])
+      if (selected?.id === updated.id) setSelected(updated)
+    }
+    if (event === 'notification') { const n = data as Notification; setNotifications(ns => [n, ...ns]); notify(n.message) }
+    if (event === 'driver_location') {
+      const dl = data as DriverLocation
+      setDriverLocations(locs => { const i = locs.findIndex(l => l.driverId === dl.driverId); if (i >= 0) { const n = [...locs]; n[i] = dl; return n }; return [...locs, dl] })
+    }
+  })
 
-function CreateTask({onCreate,onCancel}:{onCreate:(t:Omit<Task,'id'|'created'|'status'|'requester'>)=>void,onCancel:()=>void}){
- const [title,setTitle]=useState(''); const [destination,setDestination]=useState(''); const [address,setAddress]=useState(''); const [priority,setPriority]=useState<Priority>('NORMAL'); const [description,setDescription]=useState(''); const [referencePhoto,setReferencePhoto]=useState(''); const [error,setError]=useState('')
- const submit=(e:React.FormEvent)=>{e.preventDefault();if(!title.trim()||!destination.trim()||!address.trim()){setError('Judul, lokasi, dan alamat wajib diisi.');return}onCreate({title:title.trim(),destination:destination.trim(),address:address.trim(),priority,description:description.trim()||'Tidak ada detail tambahan.',division:'Purchasing',assignee:'Risen Driver',referencePhoto:referencePhoto||undefined})}
- return <main className="page narrow"><button className="back" onClick={onCancel}>‹ Kembali</button><div className="page-head"><div><p className="eyebrow">PERMINTAAN BARU</p><h1>Buat tugas lapangan</h1><p>Berikan instruksi singkat dan jelas untuk driver.</p></div></div><form className="form panel" onSubmit={submit}><label>Judul tugas<input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Contoh: Ambil dokumen vendor" autoFocus/></label><div className="form-grid"><label>Divisi<input value="Purchasing" disabled/></label><label>Driver<input value="Risen Driver" disabled/></label></div><label>Prioritas<select value={priority} onChange={e=>setPriority(e.target.value as Priority)}><option>NORMAL</option><option>URGENT</option></select></label><label>Nama lokasi<input value={destination} onChange={e=>setDestination(e.target.value)} placeholder="Contoh: Kantor Notaris"/></label><label>Alamat lengkap<input value={address} onChange={e=>setAddress(e.target.value)} placeholder="Jalan, nomor, dan patokan"/></label><label>Instruksi<textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="Barang yang dibawa, PIC tujuan, atau catatan lain" rows={4}/></label><label>Foto referensi<input type="file" accept="image/*" onChange={e=>setReferencePhoto(e.target.files?.[0]?.name||'')}/><small>{referencePhoto||'Opsional · Preview lokal saja'}</small></label><div className="map-placeholder"><span>⌖</span><div><b>Pratinjau lokasi</b><small>Placeholder peta — tanpa Google Maps</small></div></div>{error&&<p className="error">{error}</p>}<div className="form-actions"><button type="button" className="secondary" onClick={onCancel}>Batal</button><button className="primary">Buat tugas</button></div></form></main>
-}
+  useEffect(() => {
+    request<{ user: SessionUser }>('/me').then(async ({ user }) => { setUser(user); setWsToken('cookie'); await loadAll(user) }).catch(() => setUser(null)).finally(() => setLoading(false))
+  }, [loadAll])
 
-function DriverDashboard({tasks,onOpen}:{tasks:Task[],onOpen:(t:Task)=>void}){
- const sorted=useMemo(()=>sortDriverTasks(tasks.filter(t=>t.assignee==='Risen Driver')),[tasks])
- return <main className="page driver-page"><div className="page-head"><div><p className="eyebrow">TUGAS HARI INI</p><h1>Halo, Risen.</h1><p>{sorted.length} tugas menunggu tindakan Anda.</p></div><span className="availability"><i/> Siap bertugas</span></div>{sorted[0]?.status==='IN_PROGRESS'&&<section className="current"><p className="eyebrow">SEDANG DIKERJAKAN</p><h2>{sorted[0].title}</h2><p>{sorted[0].destination}</p><button onClick={()=>onOpen(sorted[0])}>Lanjutkan tugas <span>›</span></button></section>}<section className="panel queue"><div className="section-title"><div><h2>Antrean tugas</h2><p>Urutan: aktif, urgent terlama, lalu normal terlama</p></div><Badge>{sorted.length} TUGAS</Badge></div><div className="task-list">{sorted.filter((_,i)=>sorted[0]?.status!=='IN_PROGRESS'||i>0).map(t=><TaskRow key={t.id} task={t} onOpen={onOpen}/>)}</div></section></main>
-}
+  useEffect(() => {
+    const fn = () => { const h = window.location.hash.replace('#/', ''); if (VALID_VIEWS.includes(h as View)) { setSelected(null); setView(h as View) } }
+    window.addEventListener('hashchange', fn)
+    return () => window.removeEventListener('hashchange', fn)
+  }, [])
 
-function Detail({task,role,onBack,onUpdate}:{task:Task,role:Role,onBack:()=>void,onUpdate:(id:number,patch:Partial<Task>)=>void}){
- const [clock,setClock]=useState(()=>Date.now()); const [mode,setMode]=useState<'detail'|'complete'|'cancel'>('detail'); const [note,setNote]=useState(''); const [photos,setPhotos]=useState<string[]>([]); const [reason,setReason]=useState(''); const [error,setError]=useState('')
- useEffect(()=>{if(task.status!=='IN_PROGRESS')return;const i=setInterval(()=>setClock(Date.now()),1000);return()=>clearInterval(i)},[task.status])
- const finish=()=>{if(!photos.length){setError('Minimal satu foto bukti wajib dipilih.');return}onUpdate(task.id,{status:'COMPLETED',completedAt:Date.now(),note:note.trim()||'Tugas selesai tanpa catatan.',photos});onBack()}
- const cancel=()=>{if(!reason.trim()){setError('Alasan pembatalan wajib diisi.');return}onUpdate(task.id,{status:'CANCELLED',cancelledAt:Date.now(),cancelReason:reason.trim()});onBack()}
- if(mode==='complete')return <main className="page narrow"><button className="back" onClick={()=>setMode('detail')}>‹ Kembali</button><div className="page-head"><div><p className="eyebrow">BUKTI PENYELESAIAN</p><h1>Selesaikan tugas</h1><p>Tambahkan foto dan catatan singkat.</p></div></div><div className="panel form"><label className="upload"><span>＋</span><b>Tambah foto bukti</b><small>{photos.length?`${photos.length} foto: ${photos.join(', ')}`:'JPG/PNG · Preview lokal saja'}</small><input type="file" accept="image/*" multiple onChange={e=>setPhotos([...e.target.files||[]].map(f=>f.name))}/></label><label>Catatan penyelesaian<textarea rows={4} value={note} onChange={e=>setNote(e.target.value)} placeholder="Contoh: Dokumen diterima oleh Ibu Ratna"/></label>{error&&<p className="error">{error}</p>}<button className="primary full" onClick={finish}>Konfirmasi selesai</button></div></main>
- if(mode==='cancel')return <main className="page narrow"><button className="back" onClick={()=>setMode('detail')}>‹ Kembali</button><div className="page-head"><div><p className="eyebrow">PEMBATALAN TUGAS</p><h1>Batalkan tugas</h1><p>Alasan pembatalan akan tersimpan di riwayat.</p></div></div><div className="panel form"><label>Alasan pembatalan<textarea rows={4} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Jelaskan alasan tugas dibatalkan"/></label>{error&&<p className="error">{error}</p>}<button className="danger full" onClick={cancel}>Konfirmasi pembatalan</button></div></main>
- return <main className="page narrow"><button className="back" onClick={onBack}>‹ Kembali ke tugas</button><article className="detail panel"><div className="detail-top"><div><div className="badge-row"><Badge tone={task.priority==='URGENT'?'red':'gray'}>{task.priority}</Badge><Badge tone={task.status==='COMPLETED'?'green':task.status==='IN_PROGRESS'?'blue':task.status==='CANCELLED'?'red':'gray'}>{task.status.replace('_',' ')}</Badge></div><h1>{task.title}</h1><p>{task.status==='WAITING'?`Sudah ${waitingAge(task.created)} belum dikerjakan`:`Dibuat ${dateTime(task.created)}`} · {task.requester}</p></div>{task.startedAt&&<div className="timer"><small>{task.status==='IN_PROGRESS'?'DURASI BERJALAN':'DURASI'}</small><strong>{duration(elapsed(task,clock))}</strong></div>}</div><div className="map-large"><span>⌖</span><div className="route-line"/><small>PLACEHOLDER PETA</small></div><div className="detail-grid"><div><small>TUJUAN</small><b>{task.destination}</b><span>{task.address}</span></div><div><small>DIVISI · DRIVER</small><b>{task.division}</b><span>{task.assignee}</span></div></div><div className="instruction"><small>INSTRUKSI</small><p>{task.description}</p>{task.referencePhoto&&<p><b>Foto referensi:</b> {task.referencePhoto}</p>}</div>{task.startedAt&&<p className="meta-line"><b>Dimulai:</b> {dateTime(task.startedAt)}</p>}{task.completedAt&&<p className="meta-line"><b>Selesai:</b> {dateTime(task.completedAt)}</p>}{task.cancelledAt&&<p className="meta-line"><b>Dibatalkan:</b> {dateTime(task.cancelledAt)}</p>}{task.photos?.length?<div className="evidence"><small>BUKTI FOTO</small>{task.photos.map((p,i)=><span key={`${p}-${i}`}>{p}</span>)}</div>:null}{role==='Driver'&&task.status==='WAITING'?<div className="action-stack"><button className="primary full" onClick={()=>onUpdate(task.id,{status:'IN_PROGRESS',startedAt:Date.now()})}>Mulai tugas</button><button className="danger secondary full" onClick={()=>setMode('cancel')}>Batalkan tugas</button></div>:role==='Driver'&&task.status==='IN_PROGRESS'?<button className="primary full" onClick={()=>setMode('complete')}>Selesaikan tugas</button>:task.status==='COMPLETED'?<div className="done-box"><b>Tugas selesai</b><p>{task.note}</p></div>:task.status==='CANCELLED'?<div className="cancelled-box"><b>Tugas dibatalkan</b><p>{task.cancelReason}</p></div>:null}</article></main>
-}
+  const navigate = (v: View) => { setSelected(null); setView(v); window.location.hash = v === 'dashboard' ? '/' : '/' + v }
 
-function Activity({tasks,role}:{tasks:Task[],role:Role}){const visible=role==='Driver'?tasks.filter(t=>t.assignee==='Risen Driver'):tasks;return <main className="page"><div className="page-head"><div><p className="eyebrow">LINTAS DIVISI</p><h1>Aktivitas driver</h1><p>Pergerakan tugas IT, Purchasing, Accounting, dan GA.</p></div></div><section className="panel timeline">{[...visible].sort((a,b)=>b.created-a.created).map(t=><div className="event" key={t.id}><span className={`event-dot ${t.status.toLowerCase()}`}/><div><div><b>{t.title}</b><Badge tone={t.status==='COMPLETED'?'green':t.status==='IN_PROGRESS'?'blue':t.status==='CANCELLED'?'red':'gray'}>{t.status.replace('_',' ')}</Badge></div><p>{t.division} · {t.requester} · {t.assignee}</p><small>{age(t.created)} lalu</small></div></div>)}</section></main>}
-function History({tasks,onOpen,role}:{tasks:Task[],onOpen:(t:Task)=>void,role:Role}){const scoped=role==='Staff'?tasks.filter(t=>t.requester.includes('Andi')):role==='Driver'?tasks.filter(t=>t.assignee==='Risen Driver'):tasks;const done=scoped.filter(t=>['COMPLETED','CANCELLED'].includes(t.status));return <main className="page"><div className="page-head"><div><p className="eyebrow">ARSIP TUGAS</p><h1>Riwayat</h1><p>Daftar pekerjaan yang telah selesai atau dibatalkan.</p></div></div><section className="panel"><div className="task-list">{done.length?done.map(t=><TaskRow key={t.id} task={t} onOpen={onOpen}/>):<div className="empty"><b>Belum ada riwayat</b><p>Tugas selesai atau dibatalkan akan tampil di sini.</p></div>}</div></section></main>}
-function Admin({tasks}:{tasks:Task[]}){return <main className="page"><div className="page-head"><div><p className="eyebrow">ADMIN OVERVIEW</p><h1>Operasional TugasGo</h1><p>Ringkasan kerja lintas divisi hari ini.</p></div></div><section className="stats admin-stats"><div><small>TOTAL TUGAS</small><strong>{tasks.length}</strong><p>seluruh divisi</p></div><div><small>AKTIF</small><strong>{tasks.filter(t=>!['COMPLETED','CANCELLED'].includes(t.status)).length}</strong><p>perlu tindak lanjut</p></div><div><small>SELESAI</small><strong>{tasks.filter(t=>t.status==='COMPLETED').length}</strong><p>tercatat</p></div><div><small>URGENT</small><strong>{tasks.filter(t=>t.priority==='URGENT'&&!['COMPLETED','CANCELLED'].includes(t.status)).length}</strong><p>prioritas tinggi</p></div></section><section className="panel division-table"><div className="section-title"><div><h2>Divisi</h2><p>Distribusi tugas aktif</p></div></div>{['IT','Purchasing','Accounting','GA'].map(d=><div key={d}><b>{d}</b><span>{tasks.filter(t=>t.division===d&&!['COMPLETED','CANCELLED'].includes(t.status)).length} aktif</span><div className="bar"><i style={{width:`${Math.max(8,tasks.filter(t=>t.division===d&&!['COMPLETED','CANCELLED'].includes(t.status)).length*34)}%`}}/></div></div>)}</section></main>}
+  const login = async (u: SessionUser) => {
+    setUser(u); setWsToken('cookie'); setLoading(true)
+    try { await loadAll(u); navigate('dashboard') }
+    catch (e) { setFatal(e instanceof Error ? e.message : 'Gagal memuat data') }
+    finally { setLoading(false) }
+  }
 
-export default function App(){
- const [role,setRole]=useState<Role|null>(null); const [view,setView]=useState<View>('dashboard'); const [returnView,setReturnView]=useState<View>('dashboard'); const [tasks,setTasks]=useState<Task[]>(seed); const [selected,setSelected]=useState<Task|null>(null); const [toast,setToast]=useState('')
- const open=(t:Task)=>{setReturnView(view);setSelected(t);setView('detail')}; const navigate=(v:View)=>{setSelected(null);setView(v)}
- const notify=(s:string)=>{setToast(s);setTimeout(()=>setToast(''),2400)}
- const update=(id:number,patch:Partial<Task>)=>{setTasks(ts=>ts.map(t=>t.id===id?{...t,...patch}:t));setSelected(s=>s?.id===id?{...s,...patch}:s);notify(patch.status==='COMPLETED'?'Tugas berhasil diselesaikan.':patch.status==='CANCELLED'?'Tugas berhasil dibatalkan.':'Timer tugas dimulai.')}
- const create=(data:Omit<Task,'id'|'created'|'status'|'requester'>)=>{setTasks(t=>[{...data,id:Date.now(),created:Date.now(),status:'WAITING',requester:'Andi Purchasing'},...t]);navigate('dashboard');notify('Tugas baru berhasil dibuat.')}
- if(!role)return <Login onLogin={r=>{setRole(r);setView('dashboard')}}/>
- let screen:React.ReactNode
- if(view==='detail'&&selected)screen=<Detail task={selected} role={role} onBack={()=>navigate(returnView)} onUpdate={update}/>
- else if(view==='activity')screen=<Activity tasks={tasks} role={role}/>
- else if(view==='history')screen=<History tasks={tasks} onOpen={open} role={role}/>
- else if(role==='Staff'&&view==='create')screen=<CreateTask onCreate={create} onCancel={()=>navigate('dashboard')}/>
- else if(role==='Staff')screen=<StaffDashboard tasks={tasks} onOpen={open} setView={navigate}/>
- else if(role==='Driver')screen=<DriverDashboard tasks={tasks} onOpen={open}/>
- else screen=<Admin tasks={tasks}/>
- return <Shell role={role} view={view} setView={navigate} logout={()=>setRole(null)}>{screen}{toast&&<div className="toast">✓ {toast}</div>}</Shell>
+  const logout = async () => {
+    try { await request('/auth/logout', { method: 'POST' }) }
+    finally { setUser(null); setTasks([]); setWsToken(null); navigate('dashboard') }
+  }
+
+  const open = (t: Task) => { setReturnView(view); setSelected(t); setView('detail') }
+
+  const update = async (id: number, patch: Partial<Task>) => {
+    const action = patch.status === 'IN_PROGRESS' ? 'start' : patch.status === 'COMPLETED' ? 'complete' : 'cancel'
+    const body = action === 'complete' ? { note: patch.note, photos: patch.photos, latitude: patch.completionLatitude, longitude: patch.completionLongitude }
+      : action === 'cancel' ? { reason: patch.cancelReason } : {}
+    const { task } = await request<{ task: Task }>(`/tasks/${id}/${action}`, { method: 'PATCH', body: JSON.stringify(body) })
+    setTasks(ts => ts.map(t => t.id === id ? task : t)); setSelected(task)
+    notify(action === 'complete' ? 'Tugas selesai.' : action === 'cancel' ? 'Tugas dibatalkan.' : 'Timer dimulai.')
+  }
+
+  const create = async (data: TaskDraft & { assigneeId: number }) => {
+    const { task } = await request<{ task: Task }>('/tasks', { method: 'POST', body: JSON.stringify({ title: data.title, description: data.description, priority: data.priority, assigneeId: data.assigneeId, locationName: data.destination, address: data.address, referencePhoto: data.referencePhoto, latitude: data.latitude, longitude: data.longitude, urgentDeadline: data.urgentDeadline || null, scheduledAt: data.scheduledAt || null, divisionId: divisions.find(d => d.name === data.division)?.id }) })
+    setTasks(t => [task, ...t]); navigate('dashboard'); notify('Tugas baru dibuat.')
+  }
+
+  const markRead = async () => { await request('/notifications/read', { method: 'POST' }); setNotifications(ns => ns.map(n => ({ ...n, read_at: n.read_at || new Date().toISOString() }))) }
+  const reloadDivisions = useCallback(() => { request<{ divisions: Division[] }>('/admin/divisions').then(r => setDivisions(r.divisions)).catch(() => {}) }, [])
+
+  if (loading) return <main className="loading">Memuat TugasGo…</main>
+  // Guest mode — halaman buat tugas tanpa login
+  if (window.location.hash === '#/buat-tugas') return <GuestTask />
+  if (!user || !role) return <Login onLogin={(u) => login(u)} />
+  if (fatal) return <main className="loading"><div><b>Gagal memuat data</b><p>{fatal}</p><button className="primary" onClick={() => location.reload()}>Coba lagi</button></div></main>
+
+  let screen: React.ReactNode
+  if (view === 'detail' && selected) screen = <Detail task={selected} role={role} onBack={() => navigate(returnView)} onUpdate={update} />
+  else if (view === 'activity') screen = <Activity tasks={tasks} role={role} driverLocations={driverLocations} />
+  else if (view === 'history') screen = <History user={user} tasks={tasks} onOpen={open} role={role} />
+  else if (view === 'report') screen = role === 'Driver' ? <DriverReport user={user} tasks={tasks} /> : <Report />
+  else if (view === 'admin') screen = <Admin divisions={divisions} onReload={reloadDivisions} />
+  else if (role === 'Staff' && view === 'create') screen = <CreateTask user={user} onCreate={create} onCancel={() => navigate('dashboard')} drivers={drivers} divisions={divisions} />
+  else if (role === 'Staff') screen = <StaffDashboard user={user} tasks={tasks} onOpen={open} setView={navigate} driverLocations={driverLocations} />
+  else if (role === 'Driver') screen = <DriverDashboard user={user} tasks={tasks} onOpen={open} />
+  else screen = <AdminOverview tasks={tasks} driverLocations={driverLocations} />
+
+  return (
+    <Shell user={user} role={role} view={view} setView={navigate} logout={logout} notifCount={unread} notifications={notifications} onMarkRead={markRead}>
+      {screen}
+      {toast && <div className="toast">✓ {toast}</div>}
+    </Shell>
+  )
 }

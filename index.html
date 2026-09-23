@@ -4,12 +4,34 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#176b46" />
-    <meta name="description" content="Prototype operasional tugas lapangan TugasGo" />
+    <meta name="description" content="Operasional tugas lapangan driver — TugasGo" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="TugasGo" />
     <link rel="icon" type="image/png" href="/image/logo1.png" />
+    <link rel="apple-touch-icon" href="/image/logo1.png" />
+    <link rel="manifest" href="/manifest.json" />
     <title>TugasGo · Operasional Lapangan</title>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Register Service Worker
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {})
+        })
+      }
+      // Load Google Maps JS API
+      window.__loadGoogleMaps = function(key) {
+        if (!key || window.google) return
+        const s = document.createElement('script')
+        s.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places&language=id`
+        s.async = true; s.defer = true
+        document.head.appendChild(s)
+      }
+    </script>
   </body>
 </html>
