@@ -24,7 +24,8 @@ export default function Login({ onLogin }: { onLogin: (u: SessionUser, token: st
         <Logo variant="lockup" />
         <div>
           <p className="eyebrow">OPERASIONAL HARIAN</p>
-          <h1>Tugas beres.<br />Pergerakan jelas.</h1>
+          <h1>Driver Task Management System</h1>
+          <small>by Auri IT System</small>
         </div>
         <small>Sistem internal ASM</small>
       </section>
