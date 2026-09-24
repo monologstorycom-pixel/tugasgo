@@ -39,6 +39,12 @@ export function parseLocation(input) {
   return { latitude, longitude, accuracy }
 }
 
+export const normalizeName = value => String(value || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('id-ID')
+
+export function attendanceStatus(driverName, scannedNames) {
+  return scannedNames.has(normalizeName(driverName)) ? 'AVAILABLE' : 'ON_LEAVE'
+}
+
 export function visibleTasks(user, tasks) {
   if (user.role === 'ADMIN') return tasks
   if (user.role === 'STAFF') return tasks.filter(task => Number(task.creatorId) === Number(user.id))

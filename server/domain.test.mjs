@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { hashPassword, verifyPassword, createToken, hashToken, canTransition, parseLocation, visibleTasks } from './domain.mjs'
+import { attendanceStatus, hashPassword, verifyPassword, createToken, hashToken, canTransition, normalizeName, parseLocation, visibleTasks } from './domain.mjs'
 
 test('password hash verifies without storing plaintext', async () => {
   const stored = await hashPassword('123456')
@@ -32,6 +32,12 @@ test('location validation enforces geographic ranges and accuracy', () => {
   assert.throws(() => parseLocation({ latitude: 91, longitude: 0 }), /Latitude tidak valid/)
   assert.throws(() => parseLocation({ latitude: 0, longitude: -181 }), /Longitude tidak valid/)
   assert.throws(() => parseLocation({ latitude: 0, longitude: 0, accuracy: -1 }), /Akurasi tidak valid/)
+})
+
+test('attendance matches driver names case-insensitively with normalized spaces', () => {
+  const scanned = new Set([normalizeName('Aditya  Sandi Jentera')])
+  assert.equal(attendanceStatus(' aditya sandi jentera ', scanned), 'AVAILABLE')
+  assert.equal(attendanceStatus('Driver Tidak Hadir', scanned), 'ON_LEAVE')
 })
 
 test('task visibility follows role ownership', () => {

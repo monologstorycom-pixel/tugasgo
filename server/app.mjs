@@ -4,7 +4,7 @@ import mysql from 'mysql2/promise'
 import { Storage } from '@google-cloud/storage'
 import ExcelJS from 'exceljs'
 import sharp from 'sharp'
-import { canTransition, createToken, hashToken, verifyPassword, hashPassword, parseLocation } from './domain.mjs'
+import { attendanceStatus, canTransition, createToken, hashToken, normalizeName, verifyPassword, hashPassword, parseLocation } from './domain.mjs'
 
 const pool = mysql.createPool({ uri: process.env.DATABASE_URL, connectionLimit: 10, timezone: 'Z' })
 const port = Number(process.env.PORT || 3001)
@@ -991,11 +991,56 @@ export async function handler(req, res) {
 
 // ─── Server + WebSocket ───────────────────────────────────────────────────────
 
+async function syncAttendance() {
+  const baseUrl = process.env.ATTENDANCE_API_URL?.replace(/\/$/, '')
+  const apiKey = process.env.ATTENDANCE_API_KEY
+  if (!baseUrl || !apiKey) return
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: process.env.APP_TIMEZONE || 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).formatToParts().map(part => [part.type, part.value]))
+  if (Number(parts.hour) < 10) return
+  const date = `${parts.year}-${parts.month}-${parts.day}`
+  const [[lastSync]] = await pool.execute("SELECT val FROM app_settings WHERE setting_key='attendance_last_sync_date'")
+  if (lastSync?.val === date) return
+  const [[lock]] = await pool.query("SELECT GET_LOCK('tugasgo-attendance-sync',0) acquired")
+  if (!lock?.acquired) return
+  try {
+    const scannedNames = new Set()
+    let offset = 0
+    while (true) {
+      const url = new URL(`${baseUrl}/api/v1/attendance`)
+      url.searchParams.set('tanggal_awal', date)
+      url.searchParams.set('tanggal_akhir', date)
+      url.searchParams.set('limit', '5000')
+      url.searchParams.set('offset', String(offset))
+      const response = await fetch(url, { headers: { authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(15_000) })
+      if (!response.ok) throw new Error(`Attendance API ${response.status}`)
+      const body = await response.json()
+      if (!body.berhasil || !Array.isArray(body.data)) throw new Error('Respons attendance tidak valid')
+      for (const scan of body.data) if (scan.nama) scannedNames.add(normalizeName(scan.nama))
+      offset += body.data.length
+      if (!body.data.length || offset >= Number(body.meta?.total || 0)) break
+    }
+    const [drivers] = await pool.query("SELECT id,name FROM users WHERE role='DRIVER' AND active=TRUE")
+    const conn = await pool.getConnection()
+    try {
+      await conn.beginTransaction()
+      for (const driver of drivers) await conn.execute('UPDATE users SET availability_status=? WHERE id=?', [attendanceStatus(driver.name, scannedNames), driver.id])
+      await conn.execute("INSERT INTO app_settings(setting_key,val) VALUES('attendance_last_sync_date',?) ON DUPLICATE KEY UPDATE val=VALUES(val)", [date])
+      await conn.commit()
+    } catch (error) { await conn.rollback(); throw error } finally { conn.release() }
+  } finally {
+    await pool.query("SELECT RELEASE_LOCK('tugasgo-attendance-sync')")
+  }
+}
+
 if (process.env.NODE_ENV !== 'test') {
   const cleanupLocations = () => pool.execute("DELETE FROM driver_locations WHERE recorded_at<DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 30 DAY)").catch(error => console.error('Cleanup lokasi gagal:', error.message))
   cleanupLocations()
   const cleanupTimer = setInterval(cleanupLocations, 24 * 60 * 60 * 1000)
   cleanupTimer.unref()
+  const runAttendanceSync = () => syncAttendance().catch(error => console.error('Sinkron absensi gagal:', error.message))
+  runAttendanceSync()
+  const attendanceTimer = setInterval(runAttendanceSync, 5 * 60 * 1000)
+  attendanceTimer.unref()
   const server = createServer(handler)
   const wss = new WebSocketServer({
     server,
