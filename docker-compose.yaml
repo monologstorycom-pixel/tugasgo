@@ -1,0 +1,29 @@
+services:
+  frontend:
+    build:
+      context: .
+      target: frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-https://tugasgo.rsby.cloud/api}
+        VITE_WS_URL: ${VITE_WS_URL:-wss://tugasgo.rsby.cloud/ws}
+        VITE_GOOGLE_MAPS_KEY: ${VITE_GOOGLE_MAPS_KEY:-}
+    expose:
+      - "80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      target: api
+    environment:
+      APP_ORIGIN: ${APP_ORIGIN:-https://tugasgo.rsby.cloud}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL wajib diisi di Coolify}
+      GCS_BUCKET: ${GCS_BUCKET:-}
+      GCS_KEY_FILE: /app/secrets/gcs-key.json
+      NODE_ENV: production
+      PORT: 3001
+    expose:
+      - "3001"
+    restart: unless-stopped
