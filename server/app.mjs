@@ -3,6 +3,7 @@ import { WebSocketServer } from 'ws'
 import mysql from 'mysql2/promise'
 import { Storage } from '@google-cloud/storage'
 import ExcelJS from 'exceljs'
+import sharp from 'sharp'
 import { canTransition, createToken, hashToken, verifyPassword, hashPassword } from './domain.mjs'
 
 const pool = mysql.createPool({ uri: process.env.DATABASE_URL, connectionLimit: 10, timezone: 'Z' })
@@ -266,7 +267,8 @@ export async function handler(req, res) {
       const [[guestRow]] = await pool.query("SELECT val FROM app_settings WHERE setting_key='guest_mode'")
       if (!guestRow || guestRow.val !== 'true') return json(res, 403, { error: 'Guest mode tidak aktif' })
       const [rows] = await pool.query(
-        `SELECT t.title,t.status,t.priority,t.created_at,t.scheduled_at,u.name assignee,d.name division,
+        `SELECT t.title,t.status,t.priority,t.created_at,t.started_at,t.scheduled_at,t.reference_photo,
+          t.completion_photos,t.completion_note,t.cancel_reason,u.name assignee,d.name division,
           COALESCE(t.guest_creator_name,creator.name) requester
          FROM tasks t
          JOIN users u ON u.id=t.assignee_id
@@ -283,7 +285,12 @@ export async function handler(req, res) {
         division: row.division,
         requester: row.requester,
         created: new Date(row.created_at).getTime(),
+        startedAt: row.started_at ? new Date(row.started_at).getTime() : null,
         scheduledAt: row.scheduled_at ? new Date(row.scheduled_at).getTime() : null,
+        referencePhoto: row.reference_photo,
+        photos: typeof row.completion_photos === 'string' ? JSON.parse(row.completion_photos) : row.completion_photos,
+        note: row.completion_note,
+        cancelReason: row.cancel_reason,
       })) })
     }
 
@@ -646,11 +653,22 @@ export async function handler(req, res) {
         owner = user.id
       }
       if (!gcs || !gcsBucket) return json(res, 503, { error: 'Penyimpanan foto belum dikonfigurasi' })
-      const { fileData, photoType, contentType, ext } = await readUpload(req)
+      const { fileData, photoType } = await readUpload(req)
       if (p === '/api/public/upload' && photoType !== 'REFERENCE') return json(res, 400, { error: 'Guest hanya dapat upload foto referensi' })
-      const key = `${photoType.toLowerCase()}/${owner}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+      let optimized
+      try {
+        optimized = await sharp(fileData, { limitInputPixels: 40_000_000, animated: false })
+          .rotate()
+          .resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true })
+          .webp({ quality: 80, effort: 4 })
+          .toBuffer()
+      } catch {
+        throw Object.assign(new Error('File gambar rusak atau dimensinya terlalu besar'), { status: 400 })
+      }
+      if (optimized.length > 5_000_000) throw Object.assign(new Error('Hasil gambar terlalu besar'), { status: 413 })
+      const key = `${photoType.toLowerCase()}/${owner}/${Date.now()}-${Math.random().toString(36).slice(2)}.webp`
       const file = gcsBucket.file(key)
-      await file.save(fileData, { contentType, resumable: false })
+      await file.save(optimized, { contentType: 'image/webp', resumable: false })
       const [signedUrl] = await file.getSignedUrl({ action: 'read', expires: Date.now() + 7 * 24 * 60 * 60 * 1000 })
       return json(res, 200, { url: signedUrl, key })
     }

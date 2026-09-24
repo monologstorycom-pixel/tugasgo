@@ -584,6 +584,21 @@ a { color: var(--green) }
 .event > div > div { display: flex; gap: 8px; align-items: center; flex-wrap: wrap }
 .event > div > p { margin: 4px 0; font-size: 12px; color: var(--muted) }
 .event > div > small { font-size: 11px; color: #a0aca6 }
+.event .event-actions { display: flex; gap: 8px; margin-top: 10px }
+.event-actions .secondary { min-height: 36px; padding: 7px 12px; font-size: 12px }
+.event .cancel-reason { display: block; margin: 9px 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--red-light) }
+.event .cancel-reason small { font-size: 10px; font-weight: 700; letter-spacing: .8px; color: var(--red) }
+.event .cancel-reason p { margin: 4px 0 0; color: var(--ink); font-size: 13px; white-space: pre-wrap }
+.evidence-dialog { width: min(92vw, 680px); max-height: 88vh; padding: 0; border: 0; border-radius: var(--radius); color: var(--ink); background: var(--paper); box-shadow: 0 24px 70px #13251c4d }
+.evidence-dialog::backdrop { background: #102019b3 }
+.evidence-dialog > div { padding: 20px }
+.evidence-dialog-title { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px }
+.evidence-dialog-title h2 { margin: 0; font-size: 18px }
+.evidence-dialog-photos { display: grid; gap: 12px }
+.evidence-dialog-photos img { width: 100%; max-height: 65vh; object-fit: contain; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #f5f7f5 }
+.driver-note { margin-top: 16px; padding: 14px; border-radius: var(--radius-sm); background: var(--green-light) }
+.driver-note small { font-size: 10px; font-weight: 700; letter-spacing: .8px; color: var(--green) }
+.driver-note p { margin: 6px 0 0; white-space: pre-wrap; font-size: 14px }
 
 /* ─── driver location ─────────────────────────────── */
 .driver-activity { margin-bottom: 16px }

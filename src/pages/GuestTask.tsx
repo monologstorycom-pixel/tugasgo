@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DriverLocation, DriverOption, Division } from '../types'
-import { API } from '../lib/api'
+import { API, duration } from '../lib/api'
 import { Badge, Logo, MapEmbed, MapPlaceholder, NavIcon, PlacesAutocomplete } from '../components/ui'
 import type { PlaceResult } from '../types'
 import { LiveMap } from './Activity'
@@ -20,12 +20,17 @@ type PublicTodayTask = {
   division: string
   requester: string
   created: number
+  startedAt: number | null
   scheduledAt: number | null
+  referencePhoto: string | null
+  photos: string[] | null
+  note: string | null
+  cancelReason: string | null
 }
 
 const statusMeta = {
   WAITING: ['Menunggu', ''],
-  IN_PROGRESS: ['Dikerjakan', 'blue'],
+  IN_PROGRESS: ['Sedang dikerjakan', 'blue'],
   COMPLETED: ['Selesai', 'green'],
   CANCELLED: ['Dibatalkan', 'red'],
 } as const
@@ -35,6 +40,7 @@ export default function GuestTask() {
   const [todayTasks, setTodayTasks] = useState<PublicTodayTask[]>([])
   const [driverLocations, setDriverLocations] = useState<DriverLocation[]>([])
   const [locationClock, setLocationClock] = useState(0)
+  const [clock, setClock] = useState(0)
   const [historyLoading, setHistoryLoading] = useState(true)
   const [historyError, setHistoryError] = useState('')
   const [guestName, setGuestName] = useState('')
@@ -55,6 +61,8 @@ export default function GuestTask() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [notAvailable, setNotAvailable] = useState(false)
+  const [preview, setPreview] = useState<{ title: string, photos: string[], note?: string } | null>(null)
+  const previewDialog = useRef<HTMLDialogElement>(null)
 
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true); setHistoryError('')
@@ -94,6 +102,22 @@ export default function GuestTask() {
     const timer = window.setInterval(loadHistory, 7000)
     return () => window.clearInterval(timer)
   }, [tab, loadHistory])
+
+  useEffect(() => {
+    if (tab !== 'activity' || !todayTasks.some(task => task.status === 'IN_PROGRESS' && task.startedAt != null)) return
+    const timer = window.setInterval(() => setClock(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [tab, todayTasks])
+
+  const showPreview = (title: string, photos: string[], note?: string) => {
+    setPreview({ title, photos, note })
+    window.requestAnimationFrame(() => previewDialog.current?.showModal())
+  }
+
+  const closePreview = () => {
+    previewDialog.current?.close()
+    setPreview(null)
+  }
 
   const handlePlaceSelect = useCallback((r: PlaceResult) => {
     setDestination(r.name); setAddress(r.address); setLat(r.lat); setLng(r.lng)
@@ -300,9 +324,14 @@ export default function GuestTask() {
                 return <div className="event" key={`${task.title}-${task.created}-${index}`}>
                   <span className={`event-dot ${task.status.toLowerCase()}`} />
                   <div>
-                    <div><b>{task.title}</b><Badge tone={color}>{label}</Badge></div>
+                    <div><b>{task.title}</b><Badge tone={color}>{label}{task.status === 'IN_PROGRESS' && task.startedAt != null ? ` · ${duration(Math.max(0, Math.floor((clock - task.startedAt) / 1000)))}` : ''}</Badge></div>
                     <p>{task.division} · {task.requester} · {task.assignee}</p>
+                    {task.status === 'CANCELLED' && task.cancelReason && <div className="cancel-reason"><small>ALASAN PEMBATALAN</small><p>{task.cancelReason}</p></div>}
                     <small>{new Intl.DateTimeFormat('id-ID', { hour: '2-digit', minute: '2-digit' }).format(task.created)}</small>
+                    {(task.referencePhoto || (task.status === 'COMPLETED' && task.photos?.length)) && <div className="event-actions">
+                      {task.referencePhoto && <button className="secondary" onClick={() => showPreview('Foto referensi', [task.referencePhoto!])}>Foto referensi</button>}
+                      {task.status === 'COMPLETED' && task.photos?.length ? <button className="secondary" onClick={() => showPreview('Bukti dari driver', task.photos!, task.note || undefined)}>Bukti driver</button> : null}
+                    </div>}
                   </div>
                 </div>
               })}
@@ -314,6 +343,13 @@ export default function GuestTask() {
       <nav className="bottom-nav" aria-label="Menu guest">
         {guestNav.map(([value, path, label]) => <button key={value} className={tab === value ? 'active' : ''} onClick={() => { setTab(value); if (value !== 'create') loadHistory() }}><NavIcon path={path} size={20} />{label}</button>)}
       </nav>
+      <dialog ref={previewDialog} className="evidence-dialog" onClose={() => setPreview(null)} onClick={e => { if (e.target === e.currentTarget) closePreview() }}>
+        {preview && <div>
+          <div className="evidence-dialog-title"><h2>{preview.title}</h2><button className="secondary" onClick={closePreview} aria-label="Tutup popup">Tutup</button></div>
+          <div className="evidence-dialog-photos">{preview.photos.map((photo, index) => <img key={photo} src={photo} alt={`${preview.title} ${index + 1}`} />)}</div>
+          {preview.note && <div className="driver-note"><small>CATATAN DRIVER</small><p>{preview.note}</p></div>}
+        </div>}
+      </dialog>
     </div>
   )
 }
