@@ -30,6 +30,7 @@ export default function Shell({ user, role, view, setView, logout, notifCount, n
 }) {
   const [notifOpen, setNotifOpen] = useState(false)
   const items = NAV[role]
+  const mobileItems = role === 'Admin' ? items.filter(([v]) => v !== 'history') : items
 
   const toggleNotif = () => {
     if (!notifOpen && notifCount > 0) onMarkRead()
@@ -85,8 +86,8 @@ export default function Shell({ user, role, view, setView, logout, notifCount, n
         {children}
       </div>
       <nav className="bottom-nav">
-        {items.map(([v, iconPath, label]) => (
-          <button key={v} className={view === v ? 'active' : ''} onClick={() => setView(v)}>
+        {mobileItems.map(([v, iconPath, label]) => (
+          <button key={v} className={view === v || (role === 'Admin' && view === 'history' && v === 'admin') ? 'active' : ''} onClick={() => setView(v)}>
             <NavIcon path={iconPath} size={20} />{label}
           </button>
         ))}

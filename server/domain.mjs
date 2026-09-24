@@ -4,7 +4,7 @@ import { promisify } from 'node:util'
 const scrypt = promisify(scryptCallback)
 
 export async function hashPassword(password) {
-  if (typeof password !== 'string' || password.length < 12) throw new Error('Password minimal 12 karakter')
+  if (typeof password !== 'string' || password.length < 6) throw new Error('Password minimal 6 karakter')
   const salt = randomBytes(16)
   const derived = await scrypt(password, salt, 64)
   return `scrypt:${salt.toString('hex')}:${Buffer.from(derived).toString('hex')}`

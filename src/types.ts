@@ -29,6 +29,6 @@ export type DriverOption = { id: number; name: string }
 export type Notification = { id: number; type: string; taskId: number; message: string; read_at: string | null; created_at: string }
 export type DriverLocation = { driverId: number; driverName: string; taskId: number | null; latitude: number; longitude: number; accuracy: number | null; updatedAt: number; taskTitle?: string | null; requester?: string | null; destination?: string | null; address?: string | null; division?: string | null }
 export type Division = { id: number; name: string; active: boolean }
-export type UserRecord = { id: number; name: string; username: string; role: ApiRole; phone: string | null; active: boolean; division_name: string | null }
+export type UserRecord = { id: number; name: string; username: string; role: ApiRole; phone: string | null; active: boolean; availability_status: 'AVAILABLE' | 'ON_LEAVE'; division_name: string | null }
 export type TaskEvent = { id: number; taskId: number; actorId: number; actor_name: string; event_type: string; created_at: string }
 export type PlaceResult = { name: string; address: string; lat: number; lng: number }

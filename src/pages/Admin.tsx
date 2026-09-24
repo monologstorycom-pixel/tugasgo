@@ -3,7 +3,7 @@ import type { Division, UserRecord, ApiRole } from '../types'
 import { request } from '../lib/api'
 import { Badge } from '../components/ui'
 
-export default function Admin({ divisions, onReload }: { divisions: Division[]; onReload: () => void }) {
+export default function Admin({ divisions, onReload, onOpenTasks }: { divisions: Division[]; onReload: () => void; onOpenTasks: () => void }) {
   const [users, setUsers] = useState<UserRecord[]>([])
   const [tab, setTab] = useState<'drivers' | 'users' | 'divisions' | 'settings'>('drivers')
   const [guestMode, setGuestMode] = useState(false)
@@ -60,6 +60,7 @@ export default function Admin({ divisions, onReload }: { divisions: Division[]; 
   }
 
   const toggle = async (id: number, active: boolean) => { await request(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify({ active }) }); load() }
+  const setDriverStatus = async (id: number, status: 'AVAILABLE' | 'ON_LEAVE') => { await request(`/drivers/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }); load() }
   const removeUser = async (user: UserRecord) => {
     if (!window.confirm(`Hapus permanen ${user.name}? Semua tugas, notifikasi, dan lokasi terkait ikut terhapus. Tindakan ini tidak dapat dibatalkan.`)) return
     setBusy(true); setError('')
@@ -89,7 +90,8 @@ export default function Admin({ divisions, onReload }: { divisions: Division[]; 
     <main className="page admin-page">
       <div className="page-head"><div><p className="eyebrow">MANAJEMEN SISTEM</p><h1>Admin panel</h1><p className="admin-page-subtitle">Kelola driver, pengguna, divisi, dan akses guest.</p></div></div>
       <div className="tab-bar admin-tabs" role="tablist" aria-label="Menu admin">
-<button role="tab" aria-selected={tab === 'drivers'} className={tab === 'drivers' ? 'active' : ''} onClick={() => setTab('drivers')}>Driver</button>
+        <button className="admin-tasks-tab" onClick={onOpenTasks}>Semua tugas</button>
+        <button role="tab" aria-selected={tab === 'drivers'} className={tab === 'drivers' ? 'active' : ''} onClick={() => setTab('drivers')}>Driver</button>
          <button role="tab" aria-selected={tab === 'users'} className={tab === 'users' ? 'active' : ''} onClick={() => setTab('users')}>Pengguna</button>
          <button role="tab" aria-selected={tab === 'divisions'} className={tab === 'divisions' ? 'active' : ''} onClick={() => setTab('divisions')}>Divisi</button>
          <button role="tab" aria-selected={tab === 'settings'} className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>Pengaturan</button>
@@ -115,11 +117,11 @@ export default function Admin({ divisions, onReload }: { divisions: Division[]; 
                   <b>{d.name}</b>
                   <small>{d.username}{d.phone ? ` · ${d.phone}` : ''}</small>
                 </div>
-                <div className={`driver-status-badge ${d.active ? 'on' : 'off'}`}>
-                  {d.active ? 'Aktif' : 'Libur'}
+                <div className={`driver-status-badge ${d.active && d.availability_status === 'AVAILABLE' ? 'on' : 'off'}`}>
+                  {!d.active ? 'Nonaktif' : d.availability_status === 'ON_LEAVE' ? 'Libur' : 'Aktif'}
                 </div>
                 <div className="admin-row-actions">
-                  <button className={d.active ? 'secondary' : 'primary'} onClick={() => toggle(d.id, !d.active)}>{d.active ? 'Set Libur' : 'Set Aktif'}</button>
+                  <button className={d.availability_status === 'AVAILABLE' ? 'secondary' : 'primary'} onClick={() => setDriverStatus(d.id, d.availability_status === 'AVAILABLE' ? 'ON_LEAVE' : 'AVAILABLE')}>{d.availability_status === 'AVAILABLE' ? 'Set Libur' : 'Set Aktif'}</button>
                   <button className="danger" onClick={() => removeUser(d)} disabled={busy}>Hapus</button>
                 </div>
               </div>
@@ -140,7 +142,7 @@ export default function Admin({ divisions, onReload }: { divisions: Division[]; 
               <div className="form-grid">
                 <label>Nama<input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required /></label>
                 <label>Username<input value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} required /></label>
-                <label>Password<input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required /></label>
+                <label>Password<input type="password" minLength={6} value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required /></label>
                 <label>Role<select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value as ApiRole }))}><option value="DRIVER">Driver</option><option value="STAFF">Staff</option><option value="ADMIN">Admin</option></select></label>
                 <label>Divisi<select value={form.divisionId} onChange={e => setForm(f => ({ ...f, divisionId: e.target.value }))}><option value="">— Tidak ada —</option>{divisions.filter(d => d.active).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></label>
                 <label>No. HP<input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} /></label>
@@ -168,7 +170,7 @@ export default function Admin({ divisions, onReload }: { divisions: Division[]; 
                       <label>Nama<input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} required /></label>
                       <label>No. HP<input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} /></label>
                       <label>Divisi<select value={editForm.divisionId} onChange={e => setEditForm(f => ({ ...f, divisionId: e.target.value }))}><option value="">— Tidak ada —</option>{divisions.filter(d => d.active).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></label>
-                      <label>Password baru<input type="password" value={editForm.password} onChange={e => setEditForm(f => ({ ...f, password: e.target.value }))} placeholder="Kosongkan jika tidak diubah" /></label>
+                      <label>Password baru<input type="password" minLength={6} value={editForm.password} onChange={e => setEditForm(f => ({ ...f, password: e.target.value }))} placeholder="Minimal 6 karakter; kosongkan jika tidak diubah" /></label>
                     </div>
                     {error && <p className="error">{error}</p>}
                     <div className="form-actions"><button type="button" className="secondary" onClick={() => setEditId(null)}>Batal</button><button className="primary" disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan'}</button></div>

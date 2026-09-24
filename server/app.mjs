@@ -329,8 +329,8 @@ export async function handler(req, res) {
       if (!['NORMAL', 'URGENT'].includes(b.priority)) return json(res, 400, { error: 'Priority tidak valid' })
       const assigneeId = Number(b.assigneeId)
       if (!Number.isSafeInteger(assigneeId)) return json(res, 400, { error: 'Driver tidak valid' })
-      const [drivers] = await pool.execute("SELECT id FROM users WHERE id=? AND role='DRIVER' AND active=TRUE", [assigneeId])
-      if (!drivers.length) return json(res, 400, { error: 'Driver tidak aktif' })
+      const [drivers] = await pool.execute("SELECT id FROM users WHERE id=? AND role='DRIVER' AND active=TRUE AND availability_status='AVAILABLE'", [assigneeId])
+      if (!drivers.length) return json(res, 400, { error: 'Driver tidak aktif atau sedang libur' })
       const divisionId = Number(b.divisionId)
       if (!Number.isSafeInteger(divisionId)) return json(res, 400, { error: 'Divisi tidak valid' })
       const [divisions] = await pool.execute('SELECT id FROM divisions WHERE id=? AND active=TRUE', [divisionId])
@@ -424,8 +424,44 @@ export async function handler(req, res) {
     if (req.method === 'GET' && p === '/api/drivers') {
       const user = await requireUser(req)
       requireRole(user, 'STAFF', 'ADMIN')
-      const [rows] = await pool.query("SELECT id,name FROM users WHERE role='DRIVER' AND active=TRUE ORDER BY name")
-      return json(res, 200, { drivers: rows.map(x => ({ ...x, id: Number(x.id) })) })
+      const [rows] = await pool.query(
+        `SELECT u.id,u.name,u.username,u.phone,u.active,u.availability_status,d.name division_name,
+          EXISTS(SELECT 1 FROM tasks t WHERE t.assignee_id=u.id AND t.status='IN_PROGRESS') on_task
+         FROM users u LEFT JOIN divisions d ON d.id=u.division_id
+         WHERE u.role='DRIVER'${user.role === 'STAFF' ? " AND u.active=TRUE AND u.availability_status='AVAILABLE'" : ''} ORDER BY u.name`
+      )
+      return json(res, 200, { drivers: rows.map(x => ({
+        id: Number(x.id), name: x.name, username: x.username, phone: x.phone,
+        active: Boolean(x.active), division: x.division_name,
+        status: !x.active ? 'DISABLED' : x.on_task ? 'ON_TASK' : x.availability_status
+      })) })
+    }
+
+    if (req.method === 'POST' && p === '/api/drivers') {
+      const user = await requireUser(req)
+      requireRole(user, 'ADMIN')
+      const b = await readBody(req)
+      if (!b.name?.trim() || !b.username?.trim() || !b.password)
+        return json(res, 400, { error: 'name, username, password wajib' })
+      const hash = await hashPassword(b.password)
+      const divisionId = b.divisionId ? Number(b.divisionId) : null
+      const [result] = await pool.execute(
+        "INSERT INTO users(name,username,password_hash,role,division_id,phone) VALUES(?,?,?,'DRIVER',?,?)",
+        [b.name.trim(), b.username.trim(), hash, divisionId, b.phone || null]
+      )
+      return json(res, 201, { driver: { id: Number(result.insertId), name: b.name.trim(), username: b.username.trim(), phone: b.phone || null, active: true, status: 'AVAILABLE' } })
+    }
+
+    const driverStatusMatch = p.match(/^\/api\/drivers\/(\d+)\/status$/)
+    if (req.method === 'PATCH' && driverStatusMatch) {
+      const user = await requireUser(req)
+      requireRole(user, 'ADMIN')
+      const b = await readBody(req)
+      if (!['AVAILABLE', 'ON_LEAVE'].includes(b.status)) return json(res, 400, { error: 'Status harus AVAILABLE atau ON_LEAVE' })
+      const driverId = Number(driverStatusMatch[1])
+      const [result] = await pool.execute("UPDATE users SET availability_status=? WHERE id=? AND role='DRIVER'", [b.status, driverId])
+      if (!result.affectedRows) return json(res, 404, { error: 'Driver tidak ditemukan' })
+      return json(res, 200, { id: driverId, status: b.status })
     }
 
     // ── driver locations (GPS) ────────────────────────────────────────────────
@@ -512,8 +548,8 @@ export async function handler(req, res) {
       if (!['NORMAL', 'URGENT'].includes(b.priority)) return json(res, 400, { error: 'Priority tidak valid' })
       const assigneeId = Number(b.assigneeId)
       if (!Number.isSafeInteger(assigneeId)) return json(res, 400, { error: 'Driver tidak valid' })
-      const [drivers] = await pool.execute("SELECT id FROM users WHERE id=? AND role='DRIVER' AND active=TRUE", [assigneeId])
-      if (!drivers.length) return json(res, 400, { error: 'Driver tidak aktif' })
+      const [drivers] = await pool.execute("SELECT id FROM users WHERE id=? AND role='DRIVER' AND active=TRUE AND availability_status='AVAILABLE'", [assigneeId])
+      if (!drivers.length) return json(res, 400, { error: 'Driver tidak aktif atau sedang libur' })
       const divisionId = user.role === 'STAFF' ? user.divisionId : Number(b.divisionId)
       if (!divisionId) return json(res, 400, { error: 'Division wajib' })
       const lat = b.latitude ? Number(b.latitude) : null
@@ -797,7 +833,7 @@ export async function handler(req, res) {
       const user = await requireUser(req)
       requireRole(user, 'ADMIN')
       const [rows] = await pool.query(
-        `SELECT u.id,u.name,u.username,u.role,u.phone,u.active,u.created_at,d.name division_name
+        `SELECT u.id,u.name,u.username,u.role,u.phone,u.active,u.availability_status,u.created_at,d.name division_name
          FROM users u LEFT JOIN divisions d ON d.id=u.division_id ORDER BY u.role,u.name`
       )
       return json(res, 200, { users: rows.map(r => ({ ...r, id: Number(r.id) })) })

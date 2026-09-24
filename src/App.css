@@ -630,6 +630,7 @@ a { color: var(--green) }
 .tab-bar { display: flex; margin-bottom: 18px; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--paper); width: fit-content }
 .tab-bar button { border: 0; background: none; padding: 9px 18px; font-weight: 600; font-size: 13px; color: var(--muted); transition: background .12s, color .12s }
 .tab-bar button.active { background: var(--green); color: white }
+.admin-tabs .admin-tasks-tab { display: none }
 
 /* ─── user list (admin) ───────────────────────────── */
 .user-list { display: grid; gap: 0; padding: 0 20px 12px }
@@ -801,6 +802,7 @@ label.upload { display: grid }
   .admin-page-subtitle { font-size: 13px }
   .admin-tabs { width: calc(100vw - 28px); margin-bottom: 14px }
   .admin-tabs button { flex: 0 0 auto; padding: 10px 15px }
+  .admin-tabs .admin-tasks-tab { display: block }
   .admin-page .section-title { min-height: 0; align-items: flex-start }
   .admin-page .section-title > button { min-height: 42px }
   .admin-page .inline-form .form-grid { grid-template-columns: 1fr }

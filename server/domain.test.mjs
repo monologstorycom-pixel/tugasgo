@@ -3,10 +3,11 @@ import assert from 'node:assert/strict'
 import { hashPassword, verifyPassword, createToken, hashToken, canTransition, visibleTasks } from './domain.mjs'
 
 test('password hash verifies without storing plaintext', async () => {
-  const stored = await hashPassword('SangatRahasia123!')
-  assert.equal(stored.includes('SangatRahasia123!'), false)
-  assert.equal(await verifyPassword('SangatRahasia123!', stored), true)
+  const stored = await hashPassword('123456')
+  assert.equal(stored.includes('123456'), false)
+  assert.equal(await verifyPassword('123456', stored), true)
   assert.equal(await verifyPassword('salah', stored), false)
+  await assert.rejects(hashPassword('12345'), /Password minimal 6 karakter/)
 })
 
 test('session token is random and only its digest is persisted', () => {

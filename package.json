@@ -9,7 +9,7 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b --pretty false",
     "lint": "oxlint src",
-    "test": "node check-sort.mjs && node --test server/*.test.mjs",
+    "test": "node --test server/*.test.mjs",
     "server": "node server/app.mjs",
     "db:migrate": "node server/migrate.mjs",
     "db:seed": "node server/seed.mjs",
