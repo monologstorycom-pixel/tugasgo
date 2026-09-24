@@ -22,6 +22,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY package*.json ./
 COPY server ./server
-RUN mkdir -p /app/secrets
+COPY docker-entrypoint.sh ./
+RUN mkdir -p /app/secrets && chmod 755 /app/docker-entrypoint.sh
 EXPOSE 3001
-CMD ["node", "server/app.mjs"]
+CMD ["/app/docker-entrypoint.sh"]

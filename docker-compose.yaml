@@ -22,6 +22,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL wajib diisi di Coolify}
       GCS_BUCKET: ${GCS_BUCKET:-}
       GCS_KEY_FILE: /app/secrets/gcs-key.json
+      GCS_KEY_JSON: ${GCS_KEY_JSON:?GCS_KEY_JSON wajib diisi di Coolify}
       NODE_ENV: production
       PORT: 3001
     expose:
