@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { SessionUser, Task, DriverLocation, TaskDraft, DriverOption, Division, View } from '../types'
 import { duration, elapsed, sortDriverTasks } from '../lib/api'
-import { useGpsTracking } from '../lib/hooks'
 import { Badge, MapEmbed, MapPlaceholder, PlacesAutocomplete } from '../components/ui'
 import type { PlaceResult } from '../types'
 import { request, uploadPhoto } from '../lib/api'
@@ -90,7 +89,6 @@ export function StaffDashboard({ user, tasks, onOpen, setView, driverLocations }
 export function DriverDashboard({ user, tasks, onOpen }: { user: SessionUser; tasks: Task[]; onOpen: (t: Task) => void }) {
   const sorted = useMemo(() => sortDriverTasks(tasks.filter(t => t.assigneeId === user.id)), [tasks, user.id])
   const active = sorted[0]?.status === 'IN_PROGRESS' ? sorted[0] : null
-  useGpsTracking(!!active)
 
   return (
     <main className="page driver-page">

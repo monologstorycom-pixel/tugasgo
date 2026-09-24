@@ -3,7 +3,7 @@ import './App.css'
 
 import type { SessionUser, Task, DriverOption, Division, DriverLocation, Notification, View, TaskDraft } from './types'
 import { request, roleName } from './lib/api'
-import { useWebSocket } from './lib/hooks'
+import { useGpsTracking, useWebSocket } from './lib/hooks'
 
 import Login from './components/Login'
 import Shell from './components/Shell'
@@ -36,7 +36,6 @@ export default function App() {
   const [toast, setToast] = useState('')
   const [loading, setLoading] = useState(true)
   const [fatal, setFatal] = useState('')
-  const [wsToken, setWsToken] = useState<string | null>(null)
 
   const notify = (s: string) => { setToast(s); setTimeout(() => setToast(''), 2400) }
   const unread = notifications.filter(n => !n.read_at).length
@@ -53,10 +52,14 @@ export default function App() {
     setTasks(t.tasks); setDrivers(d.drivers); setNotifications(n.notifications); setDriverLocations(act.driverLocations); setDivisions(div.divisions)
   }, [])
 
-  useWebSocket(wsToken, (event, data) => {
+  const trackingActive = user?.role === 'DRIVER' && tasks.some(task => task.assigneeId === user.id && task.status === 'IN_PROGRESS')
+  const gpsStatus = useGpsTracking(trackingActive)
+
+  useWebSocket(!!user, (event, data) => {
     if (event === 'task_updated') {
       const updated = (data as { task: Task }).task
       setTasks(ts => ts.some(t => t.id === updated.id) ? ts.map(t => t.id === updated.id ? updated : t) : [updated, ...ts])
+      if (updated.status !== 'IN_PROGRESS') setDriverLocations(locations => locations.map(location => location.taskId === updated.id ? { ...location, taskId: null } : location))
       if (selected?.id === updated.id) setSelected(updated)
     }
     if (event === 'notification') { const n = data as Notification; setNotifications(ns => [n, ...ns]); notify(n.message) }
@@ -67,8 +70,13 @@ export default function App() {
   })
 
   useEffect(() => {
-    request<{ user: SessionUser }>('/me').then(async ({ user }) => { setUser(user); setWsToken('cookie'); await loadAll(user) }).catch(() => setUser(null)).finally(() => setLoading(false))
+    request<{ user: SessionUser }>('/me').then(async ({ user }) => { setUser(user); await loadAll(user) }).catch(() => setUser(null)).finally(() => setLoading(false))
   }, [loadAll])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setDriverLocations(locations => locations.filter(location => Date.now() - location.updatedAt < 120_000)), 15_000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     const fn = () => { const h = window.location.hash.replace('#/', ''); if (VALID_VIEWS.includes(h as View)) { setSelected(null); setView(h as View) } }
@@ -79,7 +87,7 @@ export default function App() {
   const navigate = (v: View) => { setSelected(null); setView(v); window.location.hash = v === 'dashboard' ? '/' : '/' + v }
 
   const login = async (u: SessionUser) => {
-    setUser(u); setWsToken('cookie'); setLoading(true)
+    setUser(u); setLoading(true)
     try { await loadAll(u); window.history.replaceState(null, '', '/'); navigate('dashboard') }
     catch (e) { setFatal(e instanceof Error ? e.message : 'Gagal memuat data') }
     finally { setLoading(false) }
@@ -87,7 +95,7 @@ export default function App() {
 
   const logout = async () => {
     try { await request('/auth/logout', { method: 'POST' }) }
-    finally { setUser(null); setTasks([]); setWsToken(null); window.location.href = '/' }
+    finally { setUser(null); setTasks([]); window.location.href = '/' }
   }
 
   const open = (t: Task) => { setReturnView(view); setSelected(t); setView('detail') }
@@ -98,6 +106,7 @@ export default function App() {
       : action === 'cancel' ? { reason: patch.cancelReason } : {}
     const { task } = await request<{ task: Task }>(`/tasks/${id}/${action}`, { method: 'PATCH', body: JSON.stringify(body) })
     setTasks(ts => ts.map(t => t.id === id ? task : t)); setSelected(task)
+    if (action === 'complete') setDriverLocations(locations => locations.map(location => location.taskId === id ? { ...location, taskId: null } : location))
     notify(action === 'complete' ? 'Tugas selesai.' : action === 'cancel' ? 'Tugas dibatalkan.' : 'Timer dimulai.')
   }
 
@@ -126,7 +135,7 @@ export default function App() {
   else screen = <AdminOverview tasks={tasks} driverLocations={driverLocations} />
 
   return (
-    <Shell user={user} role={role} view={view} setView={navigate} logout={logout} notifCount={unread} notifications={notifications} onMarkRead={markRead}>
+    <Shell user={user} role={role} view={view} setView={navigate} logout={logout} notifCount={unread} notifications={notifications} onMarkRead={markRead} gpsStatus={user.role === 'DRIVER' && trackingActive ? gpsStatus : undefined}>
       {screen}
       {toast && <div className="toast">✓ {toast}</div>}
     </Shell>

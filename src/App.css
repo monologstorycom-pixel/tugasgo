@@ -256,6 +256,14 @@ a { color: var(--green) }
   z-index: 40;
 }
 .header-right { display: flex; align-items: center; gap: 10px; margin-right: auto }
+.gps-status { display: inline-flex; align-items: center; gap: 6px; max-width: min(58vw, 320px); font-size: 11px; color: var(--muted) }
+.gps-status i { width: 7px; height: 7px; border-radius: 50%; background: #d39b20; flex-shrink: 0 }
+.gps-status.active { color: var(--green) }
+.gps-status.active i { background: #27ae60 }
+.gps-status.warning { color: #9a6500 }
+.gps-status.warning i { background: #d39b20 }
+.gps-status.error { color: var(--red) }
+.gps-status.error i { background: var(--red) }
 .live { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; font-weight: 500 }
 .live i { width: 7px; height: 7px; border-radius: 50%; background: #27ae60; flex-shrink: 0 }
 .mobile-logo, .mobile-exit, .bottom-nav { display: none }

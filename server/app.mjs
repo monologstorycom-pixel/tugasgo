@@ -4,7 +4,7 @@ import mysql from 'mysql2/promise'
 import { Storage } from '@google-cloud/storage'
 import ExcelJS from 'exceljs'
 import sharp from 'sharp'
-import { canTransition, createToken, hashToken, verifyPassword, hashPassword } from './domain.mjs'
+import { canTransition, createToken, hashToken, verifyPassword, hashPassword, parseLocation } from './domain.mjs'
 
 const pool = mysql.createPool({ uri: process.env.DATABASE_URL, connectionLimit: 10, timezone: 'Z' })
 const port = Number(process.env.PORT || 3001)
@@ -70,7 +70,7 @@ const readUpload = async req => {
   const chunks = []; let size = 0
   for await (const chunk of req) {
     size += chunk.length
-    if (size > 10_000_000) throw Object.assign(new Error('File terlalu besar (max 10MB)'), { status: 413 })
+    if (size > 20_000_000) throw Object.assign(new Error('File terlalu besar (max 20MB)'), { status: 413 })
     chunks.push(chunk)
   }
   const buf = Buffer.concat(chunks)
@@ -304,23 +304,22 @@ export async function handler(req, res) {
           COALESCE(t.guest_creator_name,creator.name) requester
          FROM driver_last_location dll
          JOIN users u ON u.id=dll.driver_id
-         LEFT JOIN tasks t ON t.id=dll.task_id AND t.status='IN_PROGRESS'
-         LEFT JOIN users creator ON creator.id=t.creator_id
-         LEFT JOIN divisions d ON d.id=t.division_id
-         WHERE u.role='DRIVER' AND u.active=TRUE`
+          JOIN tasks t ON t.id=dll.task_id AND t.status='IN_PROGRESS'
+          LEFT JOIN users creator ON creator.id=t.creator_id
+          LEFT JOIN divisions d ON d.id=t.division_id
+          WHERE u.role='DRIVER' AND u.active=TRUE AND dll.updated_at>=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 2 MINUTE)`
+
       )
       return json(res, 200, { driverLocations: rows.map(row => ({
         driverId: Number(row.driver_id),
         driverName: row.driver_name,
         active: row.task_title != null,
-        latitude: Number(row.latitude),
-        longitude: Number(row.longitude),
+        latitude: Number(Number(row.latitude).toFixed(4)),
+        longitude: Number(Number(row.longitude).toFixed(4)),
         accuracy: row.accuracy == null ? null : Number(row.accuracy),
         updatedAt: new Date(row.updated_at).getTime(),
         taskTitle: row.task_title,
-        requester: row.requester,
         destination: row.location_name,
-        address: row.address,
         division: row.division,
       })) })
     }
@@ -476,15 +475,16 @@ export async function handler(req, res) {
       const user = await requireUser(req)
       requireRole(user, 'DRIVER')
       const b = await readBody(req)
-      const lat = Number(b.latitude); const lng = Number(b.longitude)
-      if (!isFinite(lat) || !isFinite(lng)) return json(res, 400, { error: 'Koordinat tidak valid' })
-      const accuracy = b.accuracy ? Number(b.accuracy) : null
-      // cari task aktif driver ini
+      let location
+      try { location = parseLocation(b) }
+      catch (error) { return json(res, 400, { error: error.message }) }
+      const { latitude: lat, longitude: lng, accuracy } = location
       const [active] = await pool.execute(
-        "SELECT id FROM tasks WHERE assignee_id=? AND status='IN_PROGRESS' LIMIT 1",
+        "SELECT id FROM tasks WHERE assignee_id=? AND status='IN_PROGRESS' ORDER BY started_at DESC LIMIT 1",
         [user.id]
       )
-      const taskId = active[0] ? Number(active[0].id) : null
+      if (!active[0]) return json(res, 409, { error: 'Tidak ada tugas aktif' })
+      const taskId = Number(active[0].id)
       await pool.execute(
         'INSERT INTO driver_locations(driver_id,task_id,latitude,longitude,accuracy) VALUES(?,?,?,?,?)',
         [user.id, taskId, lat, lng, accuracy]
@@ -495,9 +495,12 @@ export async function handler(req, res) {
          ON DUPLICATE KEY UPDATE task_id=VALUES(task_id),latitude=VALUES(latitude),longitude=VALUES(longitude),accuracy=VALUES(accuracy),updated_at=CURRENT_TIMESTAMP(3)`,
         [user.id, taskId, lat, lng, accuracy]
       )
-      // broadcast ke staff/admin
-      const [admins] = await pool.query("SELECT id FROM users WHERE role IN ('ADMIN','STAFF') AND active=TRUE")
-      broadcast(admins.map(a => Number(a.id)), 'driver_location', {
+      const [recipients] = await pool.execute(
+        `SELECT id FROM users WHERE role='ADMIN' AND active=TRUE
+         UNION SELECT creator_id id FROM tasks WHERE id=?`,
+        [taskId]
+      )
+      broadcast(recipients.map(recipient => Number(recipient.id)), 'driver_location', {
         driverId: user.id, driverName: user.name, taskId, latitude: lat, longitude: lng, accuracy, updatedAt: Date.now()
       })
       return json(res, 200, { ok: true })
@@ -506,10 +509,16 @@ export async function handler(req, res) {
     if (req.method === 'GET' && p === '/api/activity') {
       const user = await requireUser(req)
       requireRole(user, 'STAFF', 'ADMIN')
-      // gabungkan task + last location driver
-      const [tasks] = await pool.query(`${taskSelect} ORDER BY t.created_at DESC LIMIT 100`)
-      const [locations] = await pool.query(
-        `SELECT dll.*,u.name driver_name FROM driver_last_location dll JOIN users u ON u.id=dll.driver_id`
+      const staffTaskFilter = user.role === 'STAFF' ? ' WHERE t.creator_id=?' : ''
+      const taskParams = user.role === 'STAFF' ? [user.id] : []
+      const [tasks] = await pool.execute(`${taskSelect}${staffTaskFilter} ORDER BY t.created_at DESC LIMIT 100`, taskParams)
+      const staffLocationFilter = user.role === 'STAFF' ? ' AND t.creator_id=?' : ''
+      const [locations] = await pool.execute(
+        `SELECT dll.*,u.name driver_name FROM driver_last_location dll
+         JOIN users u ON u.id=dll.driver_id
+         JOIN tasks t ON t.id=dll.task_id
+         WHERE dll.updated_at>=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 2 MINUTE)${staffLocationFilter}`,
+        taskParams
       )
       return json(res, 200, {
         tasks: tasks.map(rowTask),
@@ -615,7 +624,9 @@ export async function handler(req, res) {
         const conn = await pool.getConnection()
         try {
           await conn.beginTransaction()
-          await conn.execute(`UPDATE tasks SET ${fields[0]} WHERE id=? AND status=?`, [...fields[1], id, task.status])
+          const [result] = await conn.execute(`UPDATE tasks SET ${fields[0]} WHERE id=? AND status=?`, [...fields[1], id, task.status])
+          if (!result.affectedRows) throw Object.assign(new Error('Status tugas sudah berubah'), { status: 409 })
+          if (action === 'complete') await conn.execute('UPDATE driver_last_location SET task_id=NULL WHERE driver_id=? AND task_id=?', [user.id, id])
           await conn.execute('INSERT INTO task_events(task_id,actor_id,event_type,metadata) VALUES(?,?,?,?)', [id, user.id, eventType, JSON.stringify(b)])
           await conn.commit()
           await notifyTaskEvent(id, eventType, user.id)
@@ -981,31 +992,29 @@ export async function handler(req, res) {
 // ─── Server + WebSocket ───────────────────────────────────────────────────────
 
 if (process.env.NODE_ENV !== 'test') {
+  const cleanupLocations = () => pool.execute("DELETE FROM driver_locations WHERE recorded_at<DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 30 DAY)").catch(error => console.error('Cleanup lokasi gagal:', error.message))
+  cleanupLocations()
+  const cleanupTimer = setInterval(cleanupLocations, 24 * 60 * 60 * 1000)
+  cleanupTimer.unref()
   const server = createServer(handler)
-  const wss = new WebSocketServer({ server, path: '/ws' })
+  const wss = new WebSocketServer({
+    server,
+    path: '/ws',
+    verifyClient: ({ origin }, done) => done(isAllowedOrigin(origin), isAllowedOrigin(origin) ? 200 : 403, isAllowedOrigin(origin) ? undefined : 'Origin tidak diizinkan'),
+  })
 
-  wss.on('connection', (ws, req) => {
+  wss.on('connection', async (ws, req) => {
     let userId = null
-    ws.on('message', async raw => {
-      try {
-        const msg = JSON.parse(raw.toString())
-        if (msg.type === 'auth') {
-          // autentikasi via token
-          const token = msg.token
-          if (!token) return ws.send(JSON.stringify({ event: 'error', data: 'Token wajib' }))
-          const [rows] = await pool.execute(
-            `SELECT u.id FROM sessions s JOIN users u ON u.id=s.user_id
-             WHERE s.token_hash=? AND s.expires_at>CURRENT_TIMESTAMP(3) AND u.active=TRUE`,
-            [hashToken(token)]
-          )
-          if (!rows[0]) return ws.send(JSON.stringify({ event: 'error', data: 'Token tidak valid' }))
-          userId = Number(rows[0].id)
-          if (!clients.has(userId)) clients.set(userId, new Set())
-          clients.get(userId).add(ws)
-          ws.send(JSON.stringify({ event: 'authenticated', data: { userId } }))
-        }
-      } catch { /* ignore malformed messages */ }
-    })
+    try {
+      const user = await auth(req)
+      if (!user) return ws.close(1008, 'Autentikasi diperlukan')
+      userId = user.id
+      if (!clients.has(userId)) clients.set(userId, new Set())
+      clients.get(userId).add(ws)
+      ws.send(JSON.stringify({ event: 'authenticated', data: { userId } }))
+    } catch {
+      return ws.close(1011, 'Autentikasi gagal')
+    }
     ws.on('close', () => {
       if (userId) {
         const sockets = clients.get(userId)

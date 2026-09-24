@@ -76,7 +76,8 @@ CREATE TABLE IF NOT EXISTS driver_locations (
   recorded_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   CONSTRAINT fk_dloc_driver FOREIGN KEY (driver_id) REFERENCES users(id),
   CONSTRAINT fk_dloc_task FOREIGN KEY (task_id) REFERENCES tasks(id),
-  INDEX idx_dloc_driver_recorded (driver_id, recorded_at)
+  INDEX idx_dloc_driver_recorded (driver_id, recorded_at),
+  INDEX idx_dloc_recorded (recorded_at)
 );
 
 CREATE TABLE IF NOT EXISTS driver_last_location (

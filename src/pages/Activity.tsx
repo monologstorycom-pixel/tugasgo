@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Task, Role, DriverLocation } from '../types'
 import { age, duration, elapsed } from '../lib/api'
 import { Badge } from '../components/ui'
@@ -14,12 +14,14 @@ export function LiveMap({ driverLocations, tasks }: { driverLocations: DriverLoc
   const mapRef2 = useRef<google.maps.Map | null>(null)
   const markers = useRef<Map<number, google.maps.Marker>>(new Map())
   const infoWindow = useRef<google.maps.InfoWindow | null>(null)
+  const [mapReady, setMapReady] = useState(false)
 
   const initMap = useCallback(() => {
     if (!mapRef.current || !window.google?.maps || mapRef2.current) return
     const center = driverLocations[0] ? { lat: driverLocations[0].latitude, lng: driverLocations[0].longitude } : { lat: -7.2575, lng: 112.7521 }
     mapRef2.current = new window.google.maps.Map(mapRef.current, { center, zoom: 13, mapTypeControl: false, streetViewControl: false })
     infoWindow.current = new window.google.maps.InfoWindow()
+    setMapReady(true)
   }, [driverLocations])
 
   useEffect(() => {
@@ -62,7 +64,7 @@ export function LiveMap({ driverLocations, tasks }: { driverLocations: DriverLoc
       driverLocations.forEach(dl => bounds.extend({ lat: dl.latitude, lng: dl.longitude }))
       mapRef2.current.fitBounds(bounds, 80)
     }
-  }, [driverLocations, tasks])
+  }, [driverLocations, tasks, mapReady])
 
   if (!import.meta.env.VITE_GOOGLE_MAPS_KEY) return <div className="map-placeholder live-map"><span>⌖</span><div><b>Maps key belum diset</b></div></div>
 

@@ -267,7 +267,8 @@ export default function GuestTask() {
              </span>
              <span className="guest-file-copy">
                <b>{referenceFile ? referenceFile.name : 'Tambahkan foto referensi'}</b>
-               <small>{referenceFile ? 'Ketuk untuk mengganti foto' : 'JPEG, PNG, atau WebP · maksimal 10MB'}</small>
+                <small>{referenceFile ? 'Ketuk untuk mengganti foto' : 'JPEG, PNG, atau WebP · maksimal 20MB'}</small>
+
              </span>
              <span className="guest-file-action">{referenceFile ? 'Ganti' : 'Pilih foto'}</span>
            </label>

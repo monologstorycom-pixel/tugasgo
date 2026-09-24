@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Role, View, SessionUser, Notification } from '../types'
 import { Logo, NavIcon } from './ui'
 import { dateTime } from '../lib/api'
+import type { GpsStatus } from '../lib/hooks'
 
 const NAV: Record<Role, [View, string, string][]> = {
   Staff: [
@@ -24,9 +25,9 @@ const NAV: Record<Role, [View, string, string][]> = {
   ],
 }
 
-export default function Shell({ user, role, view, setView, logout, notifCount, notifications, onMarkRead, children }: {
+export default function Shell({ user, role, view, setView, logout, notifCount, notifications, onMarkRead, gpsStatus, children }: {
   user: SessionUser; role: Role; view: View; setView: (v: View) => void
-  logout: () => void; notifCount: number; notifications: Notification[]; onMarkRead: () => void; children: React.ReactNode
+  logout: () => void; notifCount: number; notifications: Notification[]; onMarkRead: () => void; gpsStatus?: GpsStatus; children: React.ReactNode
 }) {
   const [notifOpen, setNotifOpen] = useState(false)
   const items = NAV[role]
@@ -58,6 +59,7 @@ export default function Shell({ user, role, view, setView, logout, notifCount, n
         <header>
           <div className="mobile-logo"><Logo variant="icon" /></div>
           <div className="header-right">
+            {gpsStatus && <span className={`gps-status ${gpsStatus.state}`} role={gpsStatus.state === 'error' || gpsStatus.state === 'warning' ? 'alert' : 'status'}><i />{gpsStatus.message}</span>}
             <div className="notif-wrap">
               <button className="notif-bell" onClick={toggleNotif} title="Notifikasi">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">

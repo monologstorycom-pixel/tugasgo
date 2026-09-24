@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { hashPassword, verifyPassword, createToken, hashToken, canTransition, visibleTasks } from './domain.mjs'
+import { hashPassword, verifyPassword, createToken, hashToken, canTransition, parseLocation, visibleTasks } from './domain.mjs'
 
 test('password hash verifies without storing plaintext', async () => {
   const stored = await hashPassword('123456')
@@ -25,6 +25,13 @@ test('only assigned driver can perform valid task transitions', () => {
   assert.equal(canTransition({ id:7, role:'DRIVER' }, task, 'COMPLETED'), false)
   assert.equal(canTransition({ id:7, role:'DRIVER' }, { ...task, status:'IN_PROGRESS' }, 'COMPLETED'), true)
   assert.equal(canTransition({ id:7, role:'DRIVER' }, task, 'CANCELLED'), true)
+})
+
+test('location validation enforces geographic ranges and accuracy', () => {
+  assert.deepEqual(parseLocation({ latitude: '-7.25', longitude: '112.75', accuracy: '12' }), { latitude: -7.25, longitude: 112.75, accuracy: 12 })
+  assert.throws(() => parseLocation({ latitude: 91, longitude: 0 }), /Latitude tidak valid/)
+  assert.throws(() => parseLocation({ latitude: 0, longitude: -181 }), /Longitude tidak valid/)
+  assert.throws(() => parseLocation({ latitude: 0, longitude: 0, accuracy: -1 }), /Akurasi tidak valid/)
 })
 
 test('task visibility follows role ownership', () => {

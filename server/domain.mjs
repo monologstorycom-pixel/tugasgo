@@ -29,6 +29,16 @@ export function canTransition(user, task, next) {
     (task.status === 'IN_PROGRESS' && next === 'COMPLETED')
 }
 
+export function parseLocation(input) {
+  const latitude = Number(input.latitude)
+  const longitude = Number(input.longitude)
+  const accuracy = input.accuracy == null ? null : Number(input.accuracy)
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) throw new Error('Latitude tidak valid')
+  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) throw new Error('Longitude tidak valid')
+  if (accuracy != null && (!Number.isFinite(accuracy) || accuracy < 0 || accuracy > 10000)) throw new Error('Akurasi tidak valid')
+  return { latitude, longitude, accuracy }
+}
+
 export function visibleTasks(user, tasks) {
   if (user.role === 'ADMIN') return tasks
   if (user.role === 'STAFF') return tasks.filter(task => Number(task.creatorId) === Number(user.id))
