@@ -85,7 +85,8 @@ Nilai `status`:
 |---|---|
 | `AVAILABLE` | Aktif dan tersedia |
 | `ON_TASK` | Sedang mengerjakan tugas |
-| `ON_LEAVE` | Libur |
+| `ON_LEAVE` | Tidak masuk |
+| `OFF_DUTY` | Driver sudah pulang |
 | `DISABLED` | Akun dinonaktifkan |
 
 ### Tambah driver

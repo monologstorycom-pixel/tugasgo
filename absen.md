@@ -107,3 +107,56 @@ Gunakan `?pegawai=true` bila snapshot pengguna mesin juga perlu dipaksa diperbar
 - Satu scan tidak dipaksa menjadi pasangan masuk dan keluar.
 - Banyak scan berbeda dalam satu hari tetap dikirim seluruhnya.
 - Penarikan data tidak mengubah atau menghapus data pada mesin.
+
+## Integrasi TugasGo
+
+TugasGo memakai log absensi untuk menentukan ketersediaan driver secara otomatis. Integrasi berjalan di backend TugasGo dan hanya membaca Attendance Service.
+
+### Konfigurasi
+
+```env
+APP_TIMEZONE=Asia/Jakarta
+ATTENDANCE_API_URL=https://mesin.rsby.cloud
+ATTENDANCE_API_KEY=<nilai SERVICE_API_KEY milik Attendance Service>
+```
+
+`ATTENDANCE_API_KEY` pada TugasGo harus memiliki nilai yang sama persis dengan `SERVICE_API_KEY` pada Attendance Service. Secret hanya boleh tersedia saat runtime dan tidak boleh memakai awalan `VITE_`.
+
+### Aturan sinkronisasi
+
+- Scheduler TugasGo memeriksa sinkronisasi setiap lima menit.
+- Sinkronisasi status hanya dijalankan setelah pukul 10.00 pada zona waktu `APP_TIMEZONE`.
+- Semua halaman log absensi untuk tanggal berjalan dibaca hingga selesai.
+- TugasGo memproses ulang status ketika `last_sync` dari Attendance Service berubah. Tanggal proses terakhir dicatat sebagai `attendance_last_sync_date`, sedangkan versi sumber terakhir dicatat sebagai `attendance_last_source_sync` di `app_settings`.
+- Nama driver dicocokkan dengan `nama` pada log absensi tanpa membedakan huruf besar-kecil dan dengan spasi yang dinormalisasi.
+- Driver aktif yang namanya ditemukan dan belum memiliki scan pukul 16.30 atau sesudahnya mendapat status `AVAILABLE`.
+- Driver aktif yang memiliki scan pukul 16.30 atau sesudahnya mendapat status `OFF_DUTY` dan ditampilkan sebagai **Driver sudah pulang**.
+- Driver aktif yang namanya tidak ditemukan pada log hari itu mendapat status `ON_LEAVE` dan ditampilkan sebagai **Tidak masuk**.
+- Driver nonaktif tidak diubah.
+- Bila Attendance Service gagal, timeout, mengembalikan respons tidak valid, atau menolak API key, seluruh status dibiarkan tetap.
+- Lock database mencegah dua instance TugasGo menjalankan sinkronisasi bersamaan.
+
+### Perubahan manual dan driver baru
+
+Admin tetap dapat mengubah status driver secara manual. Perubahan manual bertahan sampai Attendance Service menghasilkan `last_sync` baru dan TugasGo memproses ulang status.
+
+Driver baru ikut diperiksa pada pembaruan Attendance Service berikutnya setelah pukul 10.00. Nama driver di TugasGo harus sama dengan nama pada mesin absensi agar dapat dicocokkan.
+
+### Verifikasi operasional
+
+Sinkronisasi hari ini dapat diperiksa melalui:
+
+```sql
+SELECT val, updated_at
+FROM app_settings
+WHERE setting_key = 'attendance_last_sync_date';
+```
+
+Status driver dapat diperiksa melalui:
+
+```sql
+SELECT name, availability_status
+FROM users
+WHERE role = 'DRIVER' AND active = TRUE
+ORDER BY name;
+```

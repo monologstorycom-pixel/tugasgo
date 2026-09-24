@@ -103,7 +103,7 @@ export default function Admin({ divisions, onReload, onOpenTasks }: { divisions:
           <div className="section-title">
             <div>
               <h2>Status driver</h2>
-              <p>{drivers.filter(d => d.active).length} aktif · {drivers.filter(d => !d.active).length} libur</p>
+              <p>{drivers.filter(d => d.active && d.availability_status === 'AVAILABLE').length} aktif · {drivers.filter(d => d.availability_status === 'ON_LEAVE').length} tidak masuk · {drivers.filter(d => d.availability_status === 'OFF_DUTY').length} pulang</p>
             </div>
             <button className="primary" onClick={() => { setForm(f => ({ ...f, role: 'DRIVER' })); setShowAdd(v => !v); setTab('users') }}>+ Tambah driver</button>
           </div>
@@ -118,7 +118,7 @@ export default function Admin({ divisions, onReload, onOpenTasks }: { divisions:
                   <small>{d.username}{d.phone ? ` · ${d.phone}` : ''}</small>
                 </div>
                 <div className={`driver-status-badge ${d.active && d.availability_status === 'AVAILABLE' ? 'on' : 'off'}`}>
-                  {!d.active ? 'Nonaktif' : d.availability_status === 'ON_LEAVE' ? 'Libur' : 'Aktif'}
+                  {!d.active ? 'Nonaktif' : d.availability_status === 'ON_LEAVE' ? 'Tidak masuk' : d.availability_status === 'OFF_DUTY' ? 'Driver sudah pulang' : 'Aktif'}
                 </div>
                 <div className="admin-row-actions">
                   <button className={d.availability_status === 'AVAILABLE' ? 'secondary' : 'primary'} onClick={() => setDriverStatus(d.id, d.availability_status === 'AVAILABLE' ? 'ON_LEAVE' : 'AVAILABLE')}>{d.availability_status === 'AVAILABLE' ? 'Set Libur' : 'Set Aktif'}</button>
@@ -128,7 +128,7 @@ export default function Admin({ divisions, onReload, onOpenTasks }: { divisions:
             ))}
           </div>
           <div className="driver-status-note">
-            <small>Driver berstatus <b>Libur</b> tidak dapat dipilih saat membuat tugas baru.</small>
+            <small>Driver berstatus <b>Tidak masuk</b> atau <b>Driver sudah pulang</b> tidak dapat dipilih saat membuat tugas baru.</small>
           </div>
         </section>
       )}

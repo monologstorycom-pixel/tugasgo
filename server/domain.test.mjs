@@ -34,10 +34,14 @@ test('location validation enforces geographic ranges and accuracy', () => {
   assert.throws(() => parseLocation({ latitude: 0, longitude: 0, accuracy: -1 }), /Akurasi tidak valid/)
 })
 
-test('attendance matches driver names case-insensitively with normalized spaces', () => {
-  const scanned = new Set([normalizeName('Aditya  Sandi Jentera')])
-  assert.equal(attendanceStatus(' aditya sandi jentera ', scanned), 'AVAILABLE')
-  assert.equal(attendanceStatus('Driver Tidak Hadir', scanned), 'ON_LEAVE')
+test('attendance matches names and marks scans after 16:30 as off duty', () => {
+  const scans = new Map([
+    [normalizeName('Aditya  Sandi Jentera'), ['08:12:00']],
+    [normalizeName('Driver Pulang'), ['08:05:00', '16:31:00']],
+  ])
+  assert.equal(attendanceStatus(' aditya sandi jentera ', scans), 'AVAILABLE')
+  assert.equal(attendanceStatus('Driver Pulang', scans), 'OFF_DUTY')
+  assert.equal(attendanceStatus('Driver Tidak Hadir', scans), 'ON_LEAVE')
 })
 
 test('task visibility follows role ownership', () => {

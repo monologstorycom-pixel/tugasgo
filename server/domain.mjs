@@ -41,8 +41,10 @@ export function parseLocation(input) {
 
 export const normalizeName = value => String(value || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('id-ID')
 
-export function attendanceStatus(driverName, scannedNames) {
-  return scannedNames.has(normalizeName(driverName)) ? 'AVAILABLE' : 'ON_LEAVE'
+export function attendanceStatus(driverName, scansByName) {
+  const scans = scansByName.get(normalizeName(driverName)) || []
+  if (!scans.length) return 'ON_LEAVE'
+  return scans.some(time => time >= '16:30:00') ? 'OFF_DUTY' : 'AVAILABLE'
 }
 
 export function visibleTasks(user, tasks) {

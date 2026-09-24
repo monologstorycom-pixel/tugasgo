@@ -463,7 +463,7 @@ export async function handler(req, res) {
       const user = await requireUser(req)
       requireRole(user, 'ADMIN')
       const b = await readBody(req)
-      if (!['AVAILABLE', 'ON_LEAVE'].includes(b.status)) return json(res, 400, { error: 'Status harus AVAILABLE atau ON_LEAVE' })
+      if (!['AVAILABLE', 'ON_LEAVE', 'OFF_DUTY'].includes(b.status)) return json(res, 400, { error: 'Status tidak valid' })
       const driverId = Number(driverStatusMatch[1])
       const [result] = await pool.execute("UPDATE users SET availability_status=? WHERE id=? AND role='DRIVER'", [b.status, driverId])
       if (!result.affectedRows) return json(res, 404, { error: 'Driver tidak ditemukan' })
@@ -998,12 +998,11 @@ async function syncAttendance() {
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: process.env.APP_TIMEZONE || 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).formatToParts().map(part => [part.type, part.value]))
   if (Number(parts.hour) < 10) return
   const date = `${parts.year}-${parts.month}-${parts.day}`
-  const [[lastSync]] = await pool.execute("SELECT val FROM app_settings WHERE setting_key='attendance_last_sync_date'")
-  if (lastSync?.val === date) return
   const [[lock]] = await pool.query("SELECT GET_LOCK('tugasgo-attendance-sync',0) acquired")
   if (!lock?.acquired) return
   try {
-    const scannedNames = new Set()
+    const scansByName = new Map()
+    let sourceSync = null
     let offset = 0
     while (true) {
       const url = new URL(`${baseUrl}/api/v1/attendance`)
@@ -1015,16 +1014,25 @@ async function syncAttendance() {
       if (!response.ok) throw new Error(`Attendance API ${response.status}`)
       const body = await response.json()
       if (!body.berhasil || !Array.isArray(body.data)) throw new Error('Respons attendance tidak valid')
-      for (const scan of body.data) if (scan.nama) scannedNames.add(normalizeName(scan.nama))
+      sourceSync = body.meta?.last_sync || sourceSync
+      for (const scan of body.data) {
+        if (!scan.nama || typeof scan.waktu !== 'string') continue
+        const name = normalizeName(scan.nama)
+        if (!scansByName.has(name)) scansByName.set(name, [])
+        scansByName.get(name).push(scan.waktu.slice(11, 19))
+      }
       offset += body.data.length
       if (!body.data.length || offset >= Number(body.meta?.total || 0)) break
     }
+    const [[lastSourceSync]] = await pool.execute("SELECT val FROM app_settings WHERE setting_key='attendance_last_source_sync'")
+    if (sourceSync && lastSourceSync?.val === sourceSync) return
     const [drivers] = await pool.query("SELECT id,name FROM users WHERE role='DRIVER' AND active=TRUE")
     const conn = await pool.getConnection()
     try {
       await conn.beginTransaction()
-      for (const driver of drivers) await conn.execute('UPDATE users SET availability_status=? WHERE id=?', [attendanceStatus(driver.name, scannedNames), driver.id])
+      for (const driver of drivers) await conn.execute('UPDATE users SET availability_status=? WHERE id=?', [attendanceStatus(driver.name, scansByName), driver.id])
       await conn.execute("INSERT INTO app_settings(setting_key,val) VALUES('attendance_last_sync_date',?) ON DUPLICATE KEY UPDATE val=VALUES(val)", [date])
+      if (sourceSync) await conn.execute("INSERT INTO app_settings(setting_key,val) VALUES('attendance_last_source_sync',?) ON DUPLICATE KEY UPDATE val=VALUES(val)", [sourceSync])
       await conn.commit()
     } catch (error) { await conn.rollback(); throw error } finally { conn.release() }
   } finally {
