@@ -1,4 +1,4 @@
-# API Integrasi HRD — TugasGo
+# API Integrasi  — TugasGo
 
 ## Akses
 
@@ -8,7 +8,7 @@ Username Admin: <ISI_USERNAME_ADMIN>
 Password Admin: <KIRIM TERPISAH>
 ```
 
-Akses hanya berfungsi saat perangkat HRD berada pada jaringan Wi-Fi/LAN yang sama dan server TugasGo aktif.
+Akses hanya berfungsi  server TugasGo aktif.
 
 ## Autentikasi
 
