@@ -268,6 +268,7 @@ export async function handler(req, res) {
     if (req.method === 'GET' && p === '/api/public/drivers') {
       const [[guestRow]] = await pool.query("SELECT val FROM app_settings WHERE setting_key='guest_mode'")
       if (!guestRow || guestRow.val !== 'true') return json(res, 403, { error: 'Guest mode tidak aktif' })
+      await syncAttendance()
       const [rows] = await pool.query("SELECT id,name,availability_status FROM users WHERE role='DRIVER' AND active=TRUE ORDER BY name")
       return json(res, 200, { drivers: rows.map(x => ({ id: Number(x.id), name: x.name, availability_status: x.availability_status })) })
     }
@@ -460,6 +461,7 @@ export async function handler(req, res) {
     if (req.method === 'GET' && p === '/api/drivers') {
       const user = await requireUser(req)
       requireRole(user, 'STAFF', 'ADMIN')
+      await syncAttendance()
       const [rows] = await pool.query(
         `SELECT u.id,u.name,u.username,u.phone,u.active,u.availability_status,d.name division_name,
           EXISTS(SELECT 1 FROM tasks t WHERE t.assignee_id=u.id AND t.status='IN_PROGRESS') on_task

@@ -340,11 +340,11 @@ export default function GuestTask() {
              </span>
              <span className="guest-file-action">{referenceFile ? 'Ganti' : 'Pilih foto'}</span>
            </label>
-           <label>
-             Tanggal & Jam Pengerjaan (Wajib)
-             <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} min={new Date().toISOString().slice(0, 16)} required />
-             <small className="muted">Waktu driver menjalankan tugas. Jam yang sama tidak bisa bentrok.</small>
-           </label>
+            <label className="schedule-field">
+              <span>Tanggal & Jam Pengerjaan (Wajib)</span>
+              <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} min={new Date().toISOString().slice(0, 16)} required />
+              <small className="muted">Waktu driver menjalankan tugas. Jam yang sama tidak bisa bentrok.</small>
+            </label>
           {error && <p className="error">{error}</p>}
           <div className="form-actions">
             <button type="button" className="secondary" onClick={() => setTab('activity')}>Batal</button>

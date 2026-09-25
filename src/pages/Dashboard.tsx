@@ -224,31 +224,64 @@ export function CreateTask({ user, onCreate, onCancel, drivers, divisions }: {
     <main className="page narrow">
       <button className="back" onClick={onCancel}>‹ Kembali</button>
       <div className="page-head"><div><h1>Buat tugas lapangan</h1></div></div>
-      <form className="form panel" onSubmit={submit}>
+      <form className="form panel guest-create-form" onSubmit={submit}>
         <label>Judul tugas<input value={title} onChange={e => setTitle(e.target.value)} placeholder="Contoh: Beli Kabel LAN" autoFocus /></label>
         <div className="form-grid">
           {user.role === 'ADMIN'
             ? <label>Divisi<select value={divisionId} onChange={e => setDivisionId(Number(e.target.value))}>{divisions.filter(d => d.active).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></label>
             : <label>Divisi<input value={divisions.find(d => d.id === user.divisionId)?.name || ''} disabled /></label>
           }
-          <label>Driver
-            {drivers.length === 1
-              ? <input value={drivers[0].name} disabled />
-              : <select value={assigneeId} onChange={e => setAssigneeId(Number(e.target.value))}>{drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
-            }
-          </label>
+          <div className="guest-driver-picker-group">
+            <div className="guest-driver-picker-header">
+              <label>Pilih Driver</label>
+              <small>{drivers.filter(d => (d.availability_status || d.status) === 'AVAILABLE').length} driver aktif</small>
+            </div>
+            <div className="guest-driver-grid">
+              {drivers.map(d => {
+                const status = d.availability_status || d.status
+                const isAvail = status === 'AVAILABLE'
+                const isOff = status === 'OFF_DUTY'
+                const isSelected = assigneeId === d.id
+                return (
+                  <button key={d.id} type="button" className={`guest-driver-item ${isSelected ? 'selected' : ''} ${isAvail ? 'available' : isOff ? 'off-duty' : 'on-leave'}`} onClick={() => setAssigneeId(d.id)}>
+                    <div className="guest-driver-item-main">
+                      <div className="guest-driver-avatar-wrap">
+                        <span className={`avatar ${isAvail ? 'avatar-active' : ''}`}>{d.name.charAt(0)}</span>
+                        {isAvail && <span className="driver-green-logo" title="Masuk & Aktif" />}
+                      </div>
+                      <div className="guest-driver-item-text">
+                        <b>{d.name}</b>
+                        {isAvail ? <span className="guest-driver-tag tag-available"><i className="driver-green-dot" /> Masuk & Aktif</span> : isOff ? <span className="guest-driver-tag tag-off-duty">Sudah pulang</span> : <span className="guest-driver-tag tag-on-leave">Libur / tidak masuk</span>}
+                      </div>
+                    </div>
+                    <span className={`guest-driver-check ${isSelected ? 'active' : ''}`}>{isSelected ? '✓' : ''}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </div>
         <label>Prioritas<select value={priority} onChange={e => setPriority(e.target.value as import('../types').Priority)}><option>NORMAL</option><option>URGENT</option></select></label>
         <label>Cari lokasi tujuan<PlacesAutocomplete onSelect={handlePlaceSelect} /></label>
         {destination && <div className="selected-place"><b>{destination}</b><span>{address}</span>{lat && lng && <small>{lat.toFixed(6)}, {lng.toFixed(6)}</small>}</div>}
         {lat && lng ? <MapEmbed lat={lat} lng={lng} height={200} /> : <MapPlaceholder label="Belum ada lokasi dipilih" />}
         <label>Instruksi<textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Barang yang dibawa, PIC tujuan, atau catatan lain" rows={4} /></label>
-        <label>
-          Tanggal & Jam Pengerjaan (Wajib)
+        <label className="schedule-field">
+          <span>Tanggal & Jam Pengerjaan (Wajib)</span>
           <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} min={new Date().toISOString().slice(0, 16)} required />
           <small className="muted">Waktu driver menjalankan tugas ini. Jam yang sama tidak bisa bentrok.</small>
         </label>
-        <label>Foto referensi<input type="file" accept="image/*" onChange={e => setRefFile(e.target.files?.[0] || null)} /><small>{refFile ? refFile.name : ''}</small></label>
+        <label className={`guest-file-picker ${refFile ? 'has-file' : ''}`}>
+          <input type="file" accept="image/jpeg,image/png,image/webp" onChange={e => setRefFile(e.target.files?.[0] || null)} />
+          <span className="guest-file-icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 14v5a1 1 0 001 1h12a1 1 0 001-1v-5" /></svg>
+          </span>
+          <span className="guest-file-copy">
+            <b>{refFile ? refFile.name : 'Tambahkan foto referensi'}</b>
+            <small>{refFile ? 'Ketuk untuk mengganti foto' : 'JPEG, PNG, atau WebP · maksimal 20MB'}</small>
+          </span>
+          <span className="guest-file-action">{refFile ? 'Ganti' : 'Pilih foto'}</span>
+        </label>
         {error && <p className="error">{error}</p>}
         <div className="form-actions">
           <button type="button" className="secondary" onClick={onCancel}>Batal</button>
