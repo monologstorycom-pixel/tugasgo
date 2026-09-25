@@ -119,7 +119,17 @@ export default function App() {
   const markRead = async () => { await request('/notifications/read', { method: 'POST' }); setNotifications(ns => ns.map(n => ({ ...n, read_at: n.read_at || new Date().toISOString() }))) }
   const reloadDivisions = useCallback(() => { request<{ divisions: Division[] }>('/admin/divisions').then(r => setDivisions(r.divisions)).catch(() => {}) }, [])
 
-  if (loading) return <main className="loading app-loader" aria-live="polite" aria-busy="true"><div className="app-loader-content"><div className="app-loader-logo"><Logo variant="icon" /><span /></div><Logo variant="wordmark" /><div className="app-loader-track"><i /></div><small>Menyiapkan ruang kerja…</small></div></main>
+  if (loading) return (
+    <main className="loading app-loader" aria-live="polite" aria-busy="true">
+      <div className="app-loader-content">
+        <div className="app-loader-logo">
+          <Logo variant="icon" />
+          <span />
+        </div>
+        <small>Menyiapkan ruang kerja…</small>
+      </div>
+    </main>
+  )
   if (window.location.pathname === '/tugasgo') return <GuestTask />
   if (!user || !role) return <Login onLogin={(u) => login(u)} />
   if (fatal) return <main className="loading"><div><b>Gagal memuat data</b><p>{fatal}</p><button className="primary" onClick={() => location.reload()}>Coba lagi</button></div></main>

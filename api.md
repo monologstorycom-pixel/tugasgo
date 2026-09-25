@@ -202,6 +202,31 @@ GET /tasks/123
 
 Response berisi data `task` dan daftar `events` seperti tugas dibuat, dimulai, diselesaikan, atau dibatalkan.
 
+### Laporan dan Statistik (Admin / HR)
+
+```http
+GET /reports/drivers
+```
+Mengambil ringkasan statistik semua driver (total tugas, selesai, batal, in progress, waiting, total durasi detik, dan rata-rata durasi).
+
+```http
+GET /reports/divisions
+```
+Mengambil ringkasan statistik per divisi.
+
+### Export Excel Laporan Driver
+
+```http
+GET /export/driver?driverId=12&status=COMPLETED&from=2026-09-01&to=2026-09-30
+```
+- **Akses**: `ADMIN` (bisa mengisi param `driverId`) atau `DRIVER` (otomatis mengunduh data driver yang login).
+- **Query Params**:
+  - `driverId` (opsional untuk Admin): ID driver yang ingin diekspor
+  - `status` (opsional): `ALL`, `COMPLETED`, `IN_PROGRESS`, `WAITING`, `CANCELLED`
+  - `from` (opsional): `YYYY-MM-DD`
+  - `to` (opsional): `YYYY-MM-DD`
+- **Output**: File spreadsheet `.xlsx` dengan format rapi dan hyperlink foto bukti/referensi.
+
 ## Penanganan Error
 
 Semua response error berbentuk:

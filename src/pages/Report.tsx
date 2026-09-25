@@ -28,12 +28,13 @@ type Preview = { title: string; photos: string[]; note?: string }
 
 export default function Report({ tasks }: { user?: SessionUser; tasks: Task[] }) {
   const [drivers, setDrivers] = useState<DriverOption[]>([])
-  const [activeDriver, setActiveDriver] = useState<DriverOption | null>(null)
+  const [selectedDriverId, setSelectedDriverId] = useState<number>(0)
   const [filter, setFilter] = useState('ALL')
   const [search, setSearch] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [exporting, setExporting] = useState(false)
+  const [expandedTaskId, setExpandedTaskId] = useState<number | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
   const dialogRef = useRef<HTMLDialogElement>(null)
   const rangeInvalid = Boolean(from && to && from > to)
@@ -42,17 +43,22 @@ export default function Report({ tasks }: { user?: SessionUser; tasks: Task[] })
   useEffect(() => {
     request<{ drivers: DriverOption[] }>('/drivers').then(r => {
       setDrivers(r.drivers)
+      if (r.drivers.length > 0 && !selectedDriverId) {
+        setSelectedDriverId(r.drivers[0].id)
+      }
     }).catch(() => {})
-  }, [])
+  }, [selectedDriverId])
 
-  const driverTasks = activeDriver ? tasks.filter(task => {
-    if (task.assigneeId !== activeDriver.id) return false
+  const currentDriver = drivers.find(d => d.id === selectedDriverId) || drivers[0]
+
+  const driverTasks = tasks.filter(task => {
+    if (selectedDriverId && task.assigneeId !== selectedDriverId) return false
     if (filter !== 'ALL' && task.status !== filter) return false
     if (search && !`${task.title} ${task.destination} ${task.address} ${task.requester} ${task.division}`.toLocaleLowerCase('id-ID').includes(search.trim().toLocaleLowerCase('id-ID'))) return false
     if (from && task.created < localDateStart(from)) return false
     if (to && task.created > localDateEnd(to)) return false
     return true
-  }).sort((a, b) => b.created - a.created) : []
+  }).sort((a, b) => b.created - a.created)
 
   const completedWithDuration = driverTasks.filter(task => task.status === 'COMPLETED' && task.durationSeconds != null)
   const stats = {
@@ -77,12 +83,16 @@ export default function Report({ tasks }: { user?: SessionUser; tasks: Task[] })
     setFilter('ALL'); setSearch(''); setFrom(''); setTo('')
   }
 
+  const toggleTask = (id: number) => {
+    setExpandedTaskId(prev => prev === id ? null : id)
+  }
+
   const exportExcel = async () => {
-    if (!activeDriver) return
+    if (!currentDriver) return
     setExporting(true)
     try {
       const q = new URLSearchParams()
-      q.set('driverId', String(activeDriver.id))
+      q.set('driverId', String(currentDriver.id))
       if (filter !== 'ALL') q.set('status', filter)
       if (from) q.set('from', from)
       if (to) q.set('to', to)
@@ -95,7 +105,7 @@ export default function Report({ tasks }: { user?: SessionUser; tasks: Task[] })
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `laporan-${activeDriver.name.toLowerCase().replace(/\s+/g, '-')}-${new Date().toISOString().slice(0, 10)}.xlsx`
+      link.download = `laporan-${currentDriver.name.toLowerCase().replace(/\s+/g, '-')}-${new Date().toISOString().slice(0, 10)}.xlsx`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -107,80 +117,27 @@ export default function Report({ tasks }: { user?: SessionUser; tasks: Task[] })
     }
   }
 
-  // Tampilan 1: Daftar Driver (Pilih driver dulu)
-  if (!activeDriver) {
-    return (
-      <main className="page">
-        <div className="page-head">
-          <div>
-            <p className="eyebrow">REKAP OPERASIONAL</p>
-            <h1>Laporan driver</h1>
-            <p className="muted">Pilih driver untuk melihat riwayat tugas, durasi kerja, dan ekspor excel.</p>
-          </div>
-        </div>
-
-        <section className="panel" style={{ padding: '8px 16px' }}>
-          <div className="section-title" style={{ padding: '12px 0 8px' }}>
-            <div>
-              <h2>Daftar Driver</h2>
-              <small>{drivers.length} driver terdaftar</small>
-            </div>
-          </div>
-          <div className="driver-report-picker-list">
-            {drivers.map(d => {
-              const count = tasks.filter(t => t.assigneeId === d.id).length
-              const done = tasks.filter(t => t.assigneeId === d.id && t.status === 'COMPLETED').length
-              return (
-                <button
-                  key={d.id}
-                  className="driver-report-picker-card"
-                  onClick={() => { setActiveDriver(d); resetFilters() }}
-                >
-                  <div className="driver-report-picker-info">
-                    <span className="avatar avatar-active">{d.name.charAt(0)}</span>
-                    <div>
-                      <b>{d.name}</b>
-                      <small>{done} selesai · {count} total tugas</small>
-                    </div>
-                  </div>
-                  <span className="driver-report-picker-arrow">Buka laporan ›</span>
-                </button>
-              )
-            })}
-            {drivers.length === 0 && (
-              <div className="empty" style={{ padding: 24 }}><b>Belum ada data driver</b></div>
-            )}
-          </div>
-        </section>
-      </main>
-    )
-  }
-
-  // Tampilan 2: Detail Laporan Driver yang dipilih
   return (
     <main className="page driver-report-page">
-      <button className="back" onClick={() => setActiveDriver(null)}>‹ Kembali ke daftar driver</button>
-
       <div className="page-head driver-report-head">
         <div>
-          <p className="eyebrow">LAPORAN KINERJA</p>
-          <h1>{activeDriver.name}</h1>
-          <p className="muted">Riwayat tugas, durasi, bukti pekerjaan, dan ekspor Excel.</p>
+          <p className="eyebrow">REKAP OPERASIONAL</p>
+          <h1>Laporan driver</h1>
+          <p className="muted">Pilih driver dan ketuk tugas untuk melihat rincian laporan.</p>
         </div>
-        <button className="primary" onClick={exportExcel} disabled={exporting || rangeInvalid}>
-          {exporting ? 'Menyiapkan…' : '📥 Export Excel'}
+        <button className="primary" onClick={exportExcel} disabled={exporting || rangeInvalid || !currentDriver}>
+          {exporting ? 'Menyiapkan…' : 'Export Excel'}
         </button>
       </div>
 
-      <section className="stats driver-report-stats" aria-label="Ringkasan laporan">
-        <div><small>TUGAS</small><strong>{stats.total}</strong></div>
-        <div><small>SELESAI</small><strong>{stats.completed}</strong></div>
-        <div><small>DIBATALKAN</small><strong>{stats.cancelled}</strong></div>
-        <div><small>TOTAL DURASI</small><strong className="driver-report-duration">{humanDuration(stats.totalSec)}</strong></div>
-      </section>
-      {avgSec > 0 && <p className="driver-report-average">Rata-rata durasi tugas selesai <b>{humanDuration(avgSec)}</b></p>}
-
       <section className="panel driver-report-filter" aria-label="Filter laporan">
+        <label>Pilih Driver
+          <select value={selectedDriverId} onChange={e => { setSelectedDriverId(Number(e.target.value)); setExpandedTaskId(null) }}>
+            {drivers.map(d => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
+        </label>
         <label className="driver-report-search">Cari tugas atau tujuan
           <input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Contoh: antar dokumen" />
         </label>
@@ -203,88 +160,110 @@ export default function Report({ tasks }: { user?: SessionUser; tasks: Task[] })
         {rangeInvalid && <p className="error" role="alert">Tanggal akhir tidak boleh sebelum tanggal awal.</p>}
       </section>
 
-      <section className="panel report-table driver-report-table is-open">
-        <div className="section-title" style={{ padding: '14px 18px 8px' }}>
+      <section className="stats driver-report-stats" aria-label="Ringkasan laporan">
+        <div><small>TUGAS</small><strong>{stats.total}</strong></div>
+        <div><small>SELESAI</small><strong>{stats.completed}</strong></div>
+        <div><small>DIBATALKAN</small><strong>{stats.cancelled}</strong></div>
+        <div><small>TOTAL DURASI</small><strong className="driver-report-duration">{humanDuration(stats.totalSec)}</strong></div>
+      </section>
+      {avgSec > 0 && <p className="driver-report-average">Rata-rata durasi tugas selesai <b>{humanDuration(avgSec)}</b></p>}
+
+      <section className="panel" style={{ padding: '0 0 10px' }}>
+        <div className="section-title" style={{ padding: '14px 18px 10px' }}>
           <div>
-            <h2>Riwayat Tugas</h2>
+            <h2>Daftar Tugas {currentDriver ? currentDriver.name : ''}</h2>
             <small>{driverTasks.length} tugas ditemukan</small>
           </div>
         </div>
-        <p className="driver-report-swipe">Geser tabel ke samping untuk melihat kolom lainnya.</p>
-        <div className="table-wrap" tabIndex={0} role="region" aria-label="Tabel riwayat tugas driver">
-          <table>
-            <thead>
-              <tr>
-                <th>Tugas</th>
-                <th>Tujuan</th>
-                <th>Pemohon</th>
-                <th>Status</th>
-                <th>Waktu</th>
-                <th>Durasi</th>
-                <th>Catatan & bukti</th>
-              </tr>
-            </thead>
-            <tbody>
-              {driverTasks.map(task => {
-                const [statusLabel, statusColor] = statusMeta[task.status]
-                const photos = task.photos?.filter(validPhoto) || []
-                return (
-                  <tr key={task.id}>
-                    <td data-label="Tugas">
-                      <b className="report-task-title">{task.title}</b>
-                      <span className="report-task-meta">{task.division} · {task.priority === 'URGENT' ? 'Urgent' : 'Normal'}</span>
-                    </td>
-                    <td data-label="Tujuan">
-                      <b>{task.destination}</b>
-                      <span className="report-task-meta">{task.address}</span>
-                    </td>
-                    <td data-label="Pemohon">
-                      <b>{task.requester}</b>
-                      <span className="report-task-meta">{task.division}</span>
-                    </td>
-                    <td data-label="Status"><span className={`badge ${statusColor}`}>{statusLabel}</span></td>
-                    <td data-label="Waktu">
-                      {task.scheduledAt && <span>Jadwal {dateTime(task.scheduledAt)}</span>}
-                      <span>Dibuat {dateTime(task.created)}</span>
-                      {task.startedAt && <span>Mulai {dateTime(task.startedAt)}</span>}
-                      {(task.completedAt || task.cancelledAt) && <span>Akhir {dateTime(task.completedAt || task.cancelledAt!)}</span>}
-                    </td>
-                    <td data-label="Durasi">
-                      {task.durationSeconds ? humanDuration(task.durationSeconds) : task.startedAt && task.status === 'IN_PROGRESS' ? humanDuration(elapsed(task)) : '—'}
-                    </td>
-                    <td data-label="Catatan & bukti">
-                      {task.note && <p className="report-note"><b>Catatan:</b> {task.note}</p>}
-                      {task.cancelReason && <p className="report-note"><b>Alasan batal:</b> {task.cancelReason}</p>}
-                      {!task.note && !task.cancelReason && <span>—</span>}
-                      <div className="report-photo-actions">
-                        {task.referencePhoto && validPhoto(task.referencePhoto) && (
-                          <button className="secondary" onClick={() => showPreview({ title: 'Foto referensi', photos: [task.referencePhoto!] })}>
-                            Foto referensi
-                          </button>
-                        )}
-                        {photos.length > 0 && (
-                          <button className="secondary" onClick={() => showPreview({ title: 'Bukti pekerjaan', photos, note: task.note })}>
-                            Bukti driver ({photos.length})
-                          </button>
-                        )}
+
+        <div className="report-accordion-list">
+          {driverTasks.map(task => {
+            const isExpanded = expandedTaskId === task.id
+            const [statusLabel, statusColor] = statusMeta[task.status]
+            const photos = task.photos?.filter(validPhoto) || []
+            return (
+              <div key={task.id} className={`report-card-item ${isExpanded ? 'open' : ''}`}>
+                <button
+                  type="button"
+                  className="report-card-header"
+                  onClick={() => toggleTask(task.id)}
+                  aria-expanded={isExpanded}
+                >
+                  <div className="report-card-head-left">
+                    <b className="report-card-title">{task.title}</b>
+                    <small className="report-card-sub">{task.destination} · {task.requester} ({task.division})</small>
+                  </div>
+                  <div className="report-card-head-right">
+                    <span className={`badge ${statusColor}`}>{statusLabel}</span>
+                    <span className="report-card-chevron">{isExpanded ? '▲' : '▼'}</span>
+                  </div>
+                </button>
+
+                {isExpanded && (
+                  <div className="report-card-body">
+                    <div className="report-card-grid">
+                      <div>
+                        <small>ALAMAT TUJUAN</small>
+                        <span>{task.address || '—'}</span>
                       </div>
-                    </td>
-                  </tr>
-                )
-              })}
-              {!driverTasks.length && (
-                <tr>
-                  <td colSpan={7}>
-                    <div className="empty">
-                      <b>{hasFilters ? 'Tidak ada tugas yang cocok' : 'Belum ada riwayat tugas'}</b>
-                      {hasFilters && <p>Ubah atau reset filter untuk melihat data lain.</p>}
-                      {hasFilters && <button className="secondary" onClick={resetFilters}>Reset filter</button>}
+                      <div>
+                        <small>PRIORITAS</small>
+                        <span style={{ fontWeight: 700, color: task.priority === 'URGENT' ? 'var(--red)' : 'inherit' }}>{task.priority}</span>
+                      </div>
+                      <div>
+                        <small>JADWAL PENGERJAAN</small>
+                        <span>{task.scheduledAt ? dateTime(task.scheduledAt) : '—'}</span>
+                      </div>
+                      <div>
+                        <small>DIBUAT</small>
+                        <span>{dateTime(task.created)}</span>
+                      </div>
+                      <div>
+                        <small>WAKTU MULAI</small>
+                        <span>{task.startedAt ? dateTime(task.startedAt) : '—'}</span>
+                      </div>
+                      <div>
+                        <small>WAKTU SELESAI / BATAL</small>
+                        <span>{(task.completedAt || task.cancelledAt) ? dateTime(task.completedAt || task.cancelledAt!) : '—'}</span>
+                      </div>
+                      <div>
+                        <small>DURASI PENGERJAAN</small>
+                        <span>{task.durationSeconds ? humanDuration(task.durationSeconds) : task.startedAt && task.status === 'IN_PROGRESS' ? humanDuration(elapsed(task)) : '—'}</span>
+                      </div>
                     </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+
+                    {(task.note || task.cancelReason) && (
+                      <div className="report-card-note-box">
+                        {task.note && <p><b>Catatan Selesai:</b> {task.note}</p>}
+                        {task.cancelReason && <p><b>Alasan Pembatalan:</b> {task.cancelReason}</p>}
+                      </div>
+                    )}
+
+                    <div className="report-card-photo-actions">
+                      {task.referencePhoto && validPhoto(task.referencePhoto) && (
+                        <button type="button" className="secondary" onClick={() => showPreview({ title: `Foto referensi — ${task.title}`, photos: [task.referencePhoto!] })}>
+                          🖼 Foto Referensi
+                        </button>
+                      )}
+                      {photos.length > 0 && (
+                        <button type="button" className="secondary" onClick={() => showPreview({ title: `Bukti pekerjaan — ${task.title}`, photos, note: task.note })}>
+                          📸 Bukti Driver ({photos.length})
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+          {!driverTasks.length && (
+            <div className="empty" style={{ padding: '28px 16px' }}>
+              <b>{hasFilters ? 'Tidak ada tugas yang cocok' : 'Belum ada riwayat tugas'}</b>
+              {hasFilters && <p>Ubah atau reset filter untuk melihat data lain.</p>}
+              {hasFilters && <button className="secondary" onClick={resetFilters}>Reset filter</button>}
+            </div>
+          )}
         </div>
       </section>
 
@@ -304,7 +283,7 @@ export default function Report({ tasks }: { user?: SessionUser; tasks: Task[] })
             </div>
             {preview.note && (
               <div className="driver-note">
-                <small>CATATAN DRIVER</small>
+                <small>CATATAN</small>
                 <p>{preview.note}</p>
               </div>
             )}
