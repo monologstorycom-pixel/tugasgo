@@ -889,7 +889,7 @@ export async function handler(req, res) {
       ws.views = [{ state: 'frozen', xSplit: 0, ySplit: HDR, activeCell: `A${HDR + 1}` }]
       ws.autoFilter = { from: { row: HDR, column: 1 }, to: { row: HDR, column: headers.length } }
 
-      const fname = `laporan-${user.name.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0,10)}.xlsx`
+      const fname = `laporan-${driverTarget.name.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0,10)}.xlsx`
       const buf = await wb.xlsx.writeBuffer()
       res.writeHead(200, {
         'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

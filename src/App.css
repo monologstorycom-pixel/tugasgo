@@ -1074,24 +1074,21 @@ label.upload { display: grid }
   .workspace { padding-bottom: calc(68px + env(safe-area-inset-bottom)) }
   .bottom-nav { height: calc(60px + env(safe-area-inset-bottom)) }
   .bottom-nav button { min-height: 44px }
-  .driver-report-stats { grid-template-columns: repeat(2, minmax(0, 1fr)) }
-  .driver-report-filter { grid-template-columns: 1fr; padding: 14px }
-  .driver-report-filter .secondary { width: 100% }
+  .driver-report-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px }
+  .driver-report-filter { grid-template-columns: 1fr; padding: 14px; gap: 10px }
+  .driver-report-filter .secondary, .driver-report-filter .primary { width: 100% }
   .driver-report-swipe { display: block }
-  .driver-report-table .table-wrap { overflow: visible }
-  .driver-report-table table, .driver-report-table tbody, .driver-report-table tr, .driver-report-table td { display: block; width: 100% }
-  .driver-report-table table { min-width: 0 }
-  .driver-report-table thead { display: none }
-  .driver-report-table tbody { padding: 0 14px 14px }
-  .driver-report-table tr { padding: 14px 0; border-bottom: 1px solid var(--line) }
-  .driver-report-table tr:last-child { border-bottom: 0 }
-  .driver-report-table td, .driver-report-table td:first-child, .driver-report-table td:nth-child(2), .driver-report-table td:last-child { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 10px; max-width: none; padding: 7px 0; border: 0; background: transparent !important; white-space: normal }
-  .driver-report-table td::before { content: attr(data-label); color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .5px }
-  .driver-report-table td:nth-child(4) { display: grid; grid-template-columns: 104px minmax(0, 1fr) }
-  .driver-report-table td:nth-child(4)::before { grid-row: 1 / span 3 }
-  .report-photo-actions { grid-column: 2 }
-  .report-photo-actions .secondary { min-height: 44px }
-  .driver-report-table .empty { grid-column: 1 / -1; padding: 28px 12px }
+  .driver-report-table .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch }
+  .driver-report-table table { width: 100%; min-width: 640px; display: table }
+  .driver-report-table thead { display: table-header-group }
+  .driver-report-table tbody { display: table-row-group; padding: 0 }
+  .driver-report-table tr { display: table-row; padding: 0 }
+  .driver-report-table td { display: table-cell; padding: 10px 8px; vertical-align: top; border-bottom: 1px solid var(--line); white-space: normal }
+  .driver-report-table td::before { display: none }
+  .driver-report-table td:nth-child(4) { display: table-cell }
+  .report-photo-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px }
+  .report-photo-actions .secondary { min-height: 34px; font-size: 11px; padding: 4px 8px }
+  .driver-report-table .empty { padding: 28px 12px }
   .driver-report-dialog { width: calc(100vw - 20px); max-height: calc(100dvh - 20px) }
   .driver-report-dialog > div { padding: 14px }
   .driver-report-dialog .evidence-dialog-title { align-items: flex-start }
@@ -1121,10 +1118,6 @@ label.upload { display: grid }
   .driver-report-stats > div { padding: 10px 8px }
   .driver-report-duration { font-size: 13px !important }
   .driver-report-filter { padding: 10px; gap: 10px }
-  .driver-report-table tbody { padding-inline: 10px }
-  .driver-report-table td, .driver-report-table td:first-child, .driver-report-table td:nth-child(2), .driver-report-table td:last-child, .driver-report-table td:nth-child(4) { grid-template-columns: 88px minmax(0, 1fr); gap: 8px }
-  .report-photo-actions { grid-column: 1 / -1 }
-  .report-photo-actions .secondary { width: 100% }
   .driver-report-dialog .evidence-dialog-title { flex-direction: column }
   .driver-report-dialog .evidence-dialog-title .secondary { width: 100% }
   .meta-block { grid-template-columns: 1fr }

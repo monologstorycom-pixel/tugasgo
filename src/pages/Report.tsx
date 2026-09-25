@@ -92,7 +92,10 @@ export default function Report({ tasks }: { user?: SessionUser; tasks: Task[] })
       if (from) q.set('from', from)
       if (to) q.set('to', to)
       const res = await fetch(`${API}/export/driver?${q}`, { credentials: 'include' })
-      if (!res.ok) throw new Error('Ekspor gagal')
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Ekspor gagal')
+      }
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -102,8 +105,8 @@ export default function Report({ tasks }: { user?: SessionUser; tasks: Task[] })
       link.click()
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
-    } catch {
-      alert('Gagal mengekspor laporan. Coba lagi.')
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Gagal mengekspor laporan. Coba lagi.')
     } finally {
       setExporting(false)
     }
