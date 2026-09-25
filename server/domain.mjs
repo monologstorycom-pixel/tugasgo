@@ -54,6 +54,21 @@ export function attendanceStatus(driverName, scansByName, currentHour = 11) {
   return Number(currentHour) >= 11 ? 'ON_LEAVE' : 'AVAILABLE'
 }
 
+export function parseScheduledDate(value, tzOffset = '+07:00') {
+  if (!value) return null
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value
+  const s = String(value).trim()
+  if (!s) return null
+  // If string doesn't specify timezone (like '2026-09-25T12:00' from datetime-local), apply local tzOffset
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(s)) {
+    const full = s.length === 16 ? `${s}:00` : s
+    const d = new Date(`${full}${tzOffset}`)
+    return Number.isNaN(d.getTime()) ? null : d
+  }
+  const d = new Date(s)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
 export function visibleTasks(user, tasks) {
   if (user.role === 'ADMIN') return tasks
   if (user.role === 'STAFF') return tasks.filter(task => Number(task.creatorId) === Number(user.id))

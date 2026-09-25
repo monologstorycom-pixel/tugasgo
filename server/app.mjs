@@ -4,7 +4,7 @@ import mysql from 'mysql2/promise'
 import { Storage } from '@google-cloud/storage'
 import ExcelJS from 'exceljs'
 import sharp from 'sharp'
-import { attendanceStatus, canTransition, createToken, hashToken, normalizeName, verifyPassword, hashPassword, parseLocation } from './domain.mjs'
+import { attendanceStatus, canTransition, createToken, hashToken, normalizeName, verifyPassword, hashPassword, parseLocation, parseScheduledDate } from './domain.mjs'
 
 const pool = mysql.createPool({ uri: process.env.DATABASE_URL, connectionLimit: 10, timezone: 'Z' })
 const port = Number(process.env.PORT || 3001)
@@ -367,10 +367,10 @@ export async function handler(req, res) {
       const lat = b.latitude == null ? null : Number(b.latitude)
       const lng = b.longitude == null ? null : Number(b.longitude)
       if ((lat != null && (!Number.isFinite(lat) || lat < -90 || lat > 90)) || (lng != null && (!Number.isFinite(lng) || lng < -180 || lng > 180))) return json(res, 400, { error: 'Koordinat tidak valid' })
-      const urgentDeadline = b.urgentDeadline ? new Date(b.urgentDeadline) : null
+      const urgentDeadline = b.urgentDeadline ? parseScheduledDate(b.urgentDeadline) : null
       if (!b.scheduledAt) return json(res, 400, { error: 'Tanggal & jam pengerjaan wajib diisi' })
-      const scheduledAt = new Date(b.scheduledAt)
-      if (Number.isNaN(scheduledAt.getTime()) || (urgentDeadline && Number.isNaN(urgentDeadline.getTime()))) return json(res, 400, { error: 'Tanggal tidak valid' })
+      const scheduledAt = parseScheduledDate(b.scheduledAt)
+      if (!scheduledAt || (b.urgentDeadline && !urgentDeadline)) return json(res, 400, { error: 'Tanggal tidak valid' })
 
       const [conflict] = await pool.execute(
         `SELECT id, title FROM tasks WHERE assignee_id=? AND scheduled_at=? AND status IN ('WAITING','IN_PROGRESS') LIMIT 1`,
@@ -600,10 +600,10 @@ export async function handler(req, res) {
       if (!divisionId) return json(res, 400, { error: 'Division wajib' })
       const lat = b.latitude ? Number(b.latitude) : null
       const lng = b.longitude ? Number(b.longitude) : null
-      const urgentDeadline = b.urgentDeadline ? new Date(b.urgentDeadline) : null
+      const urgentDeadline = b.urgentDeadline ? parseScheduledDate(b.urgentDeadline) : null
       if (!b.scheduledAt) return json(res, 400, { error: 'Tanggal & jam pengerjaan wajib diisi' })
-      const scheduledAt = new Date(b.scheduledAt)
-      if (Number.isNaN(scheduledAt.getTime()) || (urgentDeadline && Number.isNaN(urgentDeadline.getTime()))) return json(res, 400, { error: 'Tanggal tidak valid' })
+      const scheduledAt = parseScheduledDate(b.scheduledAt)
+      if (!scheduledAt || (b.urgentDeadline && !urgentDeadline)) return json(res, 400, { error: 'Tanggal tidak valid' })
 
       const [conflict] = await pool.execute(
         `SELECT id, title FROM tasks WHERE assignee_id=? AND scheduled_at=? AND status IN ('WAITING','IN_PROGRESS') LIMIT 1`,
@@ -766,15 +766,19 @@ export async function handler(req, res) {
     // ── export Excel driver ───────────────────────────────────────────────────
     if (req.method === 'GET' && p === '/api/export/driver') {
       const user = await requireUser(req)
-      requireRole(user, 'DRIVER')
+      requireRole(user, 'DRIVER', 'ADMIN')
 
       const url2 = new URL(req.url, `http://${req.headers.host}`)
       const from = url2.searchParams.get('from')
       const to = url2.searchParams.get('to')
       const status = url2.searchParams.get('status')
+      const targetDriverId = user.role === 'ADMIN' && url2.searchParams.get('driverId') ? Number(url2.searchParams.get('driverId')) : user.id
+
+      const [[driverTarget]] = await pool.execute('SELECT id, name FROM users WHERE id=? AND role=\'DRIVER\'', [targetDriverId])
+      if (!driverTarget) return json(res, 404, { error: 'Driver tidak ditemukan' })
 
       let where = 'WHERE t.assignee_id=?'
-      const params = [user.id]
+      const params = [driverTarget.id]
       if (status && status !== 'ALL') { where += ' AND t.status=?'; params.push(status) }
       if (from) { where += ' AND t.created_at>=?'; params.push(`${from} 00:00:00`) }
       if (to) { where += ' AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY)'; params.push(`${to} 00:00:00`) }
@@ -797,7 +801,7 @@ export async function handler(req, res) {
 
       // title
       ws.mergeCells('A1:N1')
-      Object.assign(ws.getCell('A1'), { value: `Laporan Tugas — ${user.name}`, font: { bold: true, size: 14 }, alignment: { horizontal: 'center' } })
+      Object.assign(ws.getCell('A1'), { value: `Laporan Tugas — ${driverTarget.name}`, font: { bold: true, size: 14 }, alignment: { horizontal: 'center' } })
       ws.mergeCells('A2:N2')
       Object.assign(ws.getCell('A2'), { value: `Diekspor: ${fmt(Date.now())}`, font: { size: 10, color: { argb: 'FF888888' } }, alignment: { horizontal: 'center' } })
 

@@ -128,7 +128,7 @@ export default function App() {
   if (view === 'detail' && selected) screen = <Detail task={selected} role={role} onBack={() => navigate(returnView)} onUpdate={update} />
   else if (view === 'activity') screen = <Activity tasks={tasks} role={role} driverLocations={driverLocations} />
   else if (view === 'history') screen = <History user={user} tasks={tasks} onOpen={open} role={role} />
-  else if (view === 'report') screen = role === 'Driver' ? <DriverReport user={user} tasks={tasks} /> : <Report />
+  else if (view === 'report') screen = role === 'Driver' ? <DriverReport user={user} tasks={tasks} /> : <Report user={user} tasks={tasks} />
   else if (view === 'admin') screen = <Admin divisions={divisions} onReload={reloadDivisions} onOpenTasks={() => navigate('history')} />
   else if (role === 'Staff' && view === 'create') screen = <CreateTask user={user} onCreate={create} onCancel={() => navigate('dashboard')} drivers={drivers} divisions={divisions} />
   else if (role === 'Staff') screen = <StaffDashboard user={user} tasks={tasks} onOpen={open} setView={navigate} driverLocations={driverLocations} />
