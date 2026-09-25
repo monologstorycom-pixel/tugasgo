@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import type { Task, Role, TaskEvent } from '../types'
+import type { Task, Role, TaskEvent, SessionUser } from '../types'
 import { request, uploadPhoto, dateTime, duration, elapsed, waitingAge, isOverDeadline, deadlineLabel } from '../lib/api'
 import { Badge, MapEmbed } from '../components/ui'
 
-export default function Detail({ task, role, onBack, onUpdate }: {
-  task: Task; role: Role; onBack: () => void
+export default function Detail({ task, role, user, onBack, onUpdate }: {
+  task: Task; role: Role; user?: SessionUser | null; onBack: () => void
   onUpdate: (id: number, patch: Partial<Task>) => Promise<void>
 }) {
   const [clock, setClock] = useState(() => Date.now())
@@ -214,7 +214,7 @@ export default function Detail({ task, role, onBack, onUpdate }: {
             </button>
             <button className="danger secondary full" disabled={busy} onClick={() => setMode('cancel')}>Batalkan tugas</button>
           </div>
-        ) : (role === 'Staff' || role === 'Admin') && task.status === 'WAITING' ? (
+        ) : (role === 'Admin' || (role === 'Staff' && task.creatorId === user?.id)) && task.status === 'WAITING' ? (
           <div className="action-stack">
             {error && <p className="error">{error}</p>}
             <button className="danger secondary full" disabled={busy} onClick={() => setMode('cancel')}>Batalkan tugas</button>

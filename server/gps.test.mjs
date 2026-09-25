@@ -11,10 +11,9 @@ test('GPS tracking requires active task and rejects stale locations', () => {
   assert.match(app, /recorded_at<DATE_SUB\(CURRENT_TIMESTAMP\(3\),INTERVAL 30 DAY\)/)
 })
 
-test('staff location visibility follows task ownership', () => {
-  assert.match(app, /user\.role === 'STAFF' \? ' AND t\.creator_id=\?' : ''/)
-  assert.match(app, /UNION SELECT creator_id id FROM tasks WHERE id=\?/)
-  assert.doesNotMatch(app, /role IN \('ADMIN','STAFF'\).*driver_location/s)
+test('staff and admin see active driver locations', () => {
+  assert.match(app, /role IN \('ADMIN', 'STAFF'\)/)
+  assert.match(app, /LEFT JOIN tasks t ON t\.id=dll\.task_id/)
 })
 
 test('photo uploads persist stable keys and API responses refresh signed URLs', () => {

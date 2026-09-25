@@ -76,7 +76,7 @@ export function LiveMap({ driverLocations, tasks }: { driverLocations: DriverLoc
   )
 }
 
-export default function Activity({ tasks, role, driverLocations }: { tasks: Task[]; role: Role; driverLocations: DriverLocation[] }) {
+export default function Activity({ tasks, role, driverLocations, onOpen }: { tasks: Task[]; role: Role; driverLocations: DriverLocation[]; onOpen?: (t: Task) => void }) {
   const visible = role === 'Driver' ? [] : tasks
   return (
     <main className="page">
@@ -114,7 +114,7 @@ export default function Activity({ tasks, role, driverLocations }: { tasks: Task
       <section className="panel timeline">
         <div className="section-title"><div><h2>Timeline tugas</h2></div></div>
         {[...visible].sort((a, b) => b.created - a.created).map(t => (
-          <div className="event" key={t.id}>
+          <div className="event" key={t.id} onClick={() => onOpen?.(t)} style={onOpen ? { cursor: 'pointer' } : undefined}>
             <span className={`event-dot ${t.status.toLowerCase()}`} />
             <div>
               <div><b>{t.title}</b><Badge tone={t.status === 'COMPLETED' ? 'green' : t.status === 'IN_PROGRESS' ? 'blue' : t.status === 'CANCELLED' ? 'red' : 'gray'}>{t.status.replace('_', ' ')}</Badge></div>

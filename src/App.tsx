@@ -29,6 +29,7 @@ export default function App() {
   })
   const [returnView, setReturnView] = useState<View>('dashboard')
   const [tasks, setTasks] = useState<Task[]>([])
+  const [activityTasks, setActivityTasks] = useState<Task[]>([])
   const [drivers, setDrivers] = useState<DriverOption[]>([])
   const [divisions, setDivisions] = useState<Division[]>([])
   const [driverLocations, setDriverLocations] = useState<DriverLocation[]>([])
@@ -51,6 +52,7 @@ export default function App() {
       sa ? request<{ divisions: Division[] }>('/admin/divisions') : Promise.resolve({ divisions: [] }),
     ])
     setTasks(t.tasks); setDrivers(d.drivers); setNotifications(n.notifications); setDriverLocations(act.driverLocations); setDivisions(div.divisions)
+    setActivityTasks(act.tasks || [])
   }, [])
 
   const trackingActive = user?.role === 'DRIVER' && tasks.some(task => task.assigneeId === user.id && task.status === 'IN_PROGRESS')
@@ -60,6 +62,7 @@ export default function App() {
     if (event === 'task_updated') {
       const updated = (data as { task: Task }).task
       setTasks(ts => ts.some(t => t.id === updated.id) ? ts.map(t => t.id === updated.id ? updated : t) : [updated, ...ts])
+      setActivityTasks(ts => ts.some(t => t.id === updated.id) ? ts.map(t => t.id === updated.id ? updated : t) : [updated, ...ts])
       if (updated.status !== 'IN_PROGRESS') setDriverLocations(locations => locations.map(location => location.taskId === updated.id ? { ...location, taskId: null } : location))
       if (selected?.id === updated.id) setSelected(updated)
     }
@@ -135,13 +138,13 @@ export default function App() {
   if (fatal) return <main className="loading"><div><b>Gagal memuat data</b><p>{fatal}</p><button className="primary" onClick={() => location.reload()}>Coba lagi</button></div></main>
 
   let screen: React.ReactNode
-  if (view === 'detail' && selected) screen = <Detail task={selected} role={role} onBack={() => navigate(returnView)} onUpdate={update} />
-  else if (view === 'activity') screen = <Activity tasks={tasks} role={role} driverLocations={driverLocations} />
+  if (view === 'detail' && selected) screen = <Detail task={selected} role={role} user={user} onBack={() => navigate(returnView)} onUpdate={update} />
+  else if (view === 'activity') screen = <Activity tasks={activityTasks} role={role} driverLocations={driverLocations} onOpen={open} />
   else if (view === 'history') screen = <History user={user} tasks={tasks} onOpen={open} role={role} />
   else if (view === 'report') screen = role === 'Driver' ? <DriverReport user={user} tasks={tasks} /> : <Report user={user} tasks={tasks} />
   else if (view === 'admin') screen = <Admin divisions={divisions} onReload={reloadDivisions} onOpenTasks={() => navigate('history')} />
   else if (role === 'Staff' && view === 'create') screen = <CreateTask user={user} onCreate={create} onCancel={() => navigate('dashboard')} drivers={drivers} divisions={divisions} />
-  else if (role === 'Staff') screen = <StaffDashboard user={user} tasks={tasks} onOpen={open} setView={navigate} driverLocations={driverLocations} />
+  else if (role === 'Staff') screen = <StaffDashboard user={user} tasks={activityTasks.length ? activityTasks : tasks} onOpen={open} setView={navigate} driverLocations={driverLocations} />
   else if (role === 'Driver') screen = <DriverDashboard user={user} tasks={tasks} onOpen={open} />
   else screen = <AdminOverview tasks={tasks} driverLocations={driverLocations} />
 

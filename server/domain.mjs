@@ -27,7 +27,7 @@ export function canTransition(user, task, next) {
   if (next === 'CANCELLED') {
     if (task.status !== 'WAITING') return false
     if (user.role === 'ADMIN') return true
-    if (user.role === 'STAFF') return Number(task.divisionId) === Number(user.divisionId) || Number(task.creatorId) === Number(user.id)
+    if (user.role === 'STAFF') return Number(task.creatorId) === Number(user.id)
     if (user.role === 'DRIVER') return Number(task.assigneeId) === Number(user.id)
     return false
   }

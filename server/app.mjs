@@ -159,7 +159,7 @@ const getTask = async id => {
 }
 const canView = (user, task) =>
   user.role === 'ADMIN' ||
-  (user.role === 'STAFF' && task.creatorId === user.id) ||
+  user.role === 'STAFF' ||
   (user.role === 'DRIVER' && task.assigneeId === user.id)
 
 // ─── WebSocket broadcast ──────────────────────────────────────────────────────
@@ -528,9 +528,8 @@ export async function handler(req, res) {
         [user.id, taskId, lat, lng, accuracy]
       )
       const [recipients] = await pool.execute(
-        `SELECT id FROM users WHERE role='ADMIN' AND active=TRUE
-         UNION SELECT creator_id id FROM tasks WHERE id=?`,
-        [taskId]
+        `SELECT id FROM users WHERE (role IN ('ADMIN', 'STAFF') OR id=?) AND active=TRUE`,
+        [user.id]
       )
       broadcast(recipients.map(recipient => Number(recipient.id)), 'driver_location', {
         driverId: user.id, driverName: user.name, taskId, latitude: lat, longitude: lng, accuracy, updatedAt: Date.now()
@@ -541,16 +540,12 @@ export async function handler(req, res) {
     if (req.method === 'GET' && p === '/api/activity') {
       const user = await requireUser(req)
       requireRole(user, 'STAFF', 'ADMIN')
-      const staffTaskFilter = user.role === 'STAFF' ? ' WHERE t.creator_id=?' : ''
-      const taskParams = user.role === 'STAFF' ? [user.id] : []
-      const [tasks] = await pool.execute(`${taskSelect}${staffTaskFilter} ORDER BY t.created_at DESC LIMIT 100`, taskParams)
-      const staffLocationFilter = user.role === 'STAFF' ? ' AND t.creator_id=?' : ''
+      const [tasks] = await pool.execute(`${taskSelect} ORDER BY t.created_at DESC LIMIT 100`)
       const [locations] = await pool.execute(
         `SELECT dll.*,u.name driver_name FROM driver_last_location dll
          JOIN users u ON u.id=dll.driver_id
-         JOIN tasks t ON t.id=dll.task_id
-         WHERE dll.updated_at>=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 2 MINUTE)${staffLocationFilter}`,
-        taskParams
+         LEFT JOIN tasks t ON t.id=dll.task_id
+         WHERE dll.updated_at>=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 2 MINUTE)`
       )
       return json(res, 200, {
         tasks: await Promise.all(tasks.map(row => presentTask(rowTask(row)))),

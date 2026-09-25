@@ -7,6 +7,7 @@
 !tsconfig*.json
 !.oxlintrc.json
 !public/manifest.json
+!public/.well-known/assetlinks.json
 
 # Logs
 logs

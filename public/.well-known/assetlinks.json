@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "cloud.rsby.tugasgo.twa",
+      "sha256_cert_fingerprints": [
+        "11:DF:2F:3C:C4:BC:6F:AC:29:9D:82:C8:2A:77:D0:29:B4:83:49:44:FA:3A:63:E9:B3:45:02:62:CF:AD:C3:5A"
+      ]
+    }
+  }
+]
