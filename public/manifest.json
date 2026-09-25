@@ -11,22 +11,10 @@
   "theme_color": "#176b46",
   "icons": [
     {
-      "src": "/image/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/image/icon-512.png",
+      "src": "/image/icon-512.png?v=2",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
-    },
-    {
-      "src": "/image/logo1.png",
-      "sizes": "576x547",
-      "type": "image/png",
-      "purpose": "any"
     }
   ],
   "categories": ["business", "productivity", "utilities"]

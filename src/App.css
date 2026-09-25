@@ -773,6 +773,7 @@ label.upload { display: grid }
   .login-brand h1 { font-size: 32px; letter-spacing: -1.5px; margin-bottom: 8px }
   .login-brand p:not(.eyebrow) { font-size: 14px }
   .login-brand small { display: none }
+  .login-brand .login-credit { display: inline; color: #bad0c3 }
   .login-panel { padding: 24px 16px; align-items: start }
   .login-box h2 { font-size: 26px }
 

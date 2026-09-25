@@ -27,9 +27,8 @@ export default function Login({ onLogin }: { onLogin: (u: SessionUser, token: st
         <div>
           <p className="eyebrow">OPERASIONAL HARIAN</p>
           <h1>Driver Task Management System</h1>
-          <small>by Auri IT System</small>
+          <small className="login-credit">by Auri IT System</small>
         </div>
-        <small>Sistem internal ASM</small>
       </section>
       <section className="login-panel">
         <form className="login-box form" onSubmit={e => { e.preventDefault(); doLogin(username, password) }}>
