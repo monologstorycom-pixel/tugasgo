@@ -41,10 +41,10 @@ export function parseLocation(input) {
 
 export const normalizeName = value => String(value || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('id-ID')
 
-export function attendanceStatus(driverName, scansByName) {
+export function attendanceStatus(driverName, scansByName, currentHour = 11) {
   const scans = scansByName.get(normalizeName(driverName)) || []
-  if (!scans.length) return 'ON_LEAVE'
-  return scans.some(time => time >= '16:30:00') ? 'OFF_DUTY' : 'AVAILABLE'
+  if (scans.length) return scans.some(time => time >= '16:30:00') ? 'OFF_DUTY' : 'AVAILABLE'
+  return Number(currentHour) >= 11 ? 'ON_LEAVE' : 'AVAILABLE'
 }
 
 export function visibleTasks(user, tasks) {

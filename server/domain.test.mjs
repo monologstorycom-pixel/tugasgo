@@ -39,9 +39,10 @@ test('attendance matches names and marks scans after 16:30 as off duty', () => {
     [normalizeName('Aditya  Sandi Jentera'), ['08:12:00']],
     [normalizeName('Driver Pulang'), ['08:05:00', '16:31:00']],
   ])
-  assert.equal(attendanceStatus(' aditya sandi jentera ', scans), 'AVAILABLE')
-  assert.equal(attendanceStatus('Driver Pulang', scans), 'OFF_DUTY')
-  assert.equal(attendanceStatus('Driver Tidak Hadir', scans), 'ON_LEAVE')
+  assert.equal(attendanceStatus(' aditya sandi jentera ', scans, 8), 'AVAILABLE')
+  assert.equal(attendanceStatus('Driver Pulang', scans, 17), 'OFF_DUTY')
+  assert.equal(attendanceStatus('Driver Belum Scan Pagi', scans, 8), 'AVAILABLE')
+  assert.equal(attendanceStatus('Driver Tidak Hadir', scans, 11), 'ON_LEAVE')
 })
 
 test('task visibility follows role ownership', () => {

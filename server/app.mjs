@@ -1006,7 +1006,7 @@ async function syncAttendance() {
   const apiKey = process.env.ATTENDANCE_API_KEY
   if (!baseUrl || !apiKey) return
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: process.env.APP_TIMEZONE || 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).formatToParts().map(part => [part.type, part.value]))
-  if (Number(parts.hour) < 10) return
+  const currentHour = Number(parts.hour)
   const date = `${parts.year}-${parts.month}-${parts.day}`
   const [[lock]] = await pool.query("SELECT GET_LOCK('tugasgo-attendance-sync',0) acquired")
   if (!lock?.acquired) return
@@ -1034,13 +1034,11 @@ async function syncAttendance() {
       offset += body.data.length
       if (!body.data.length || offset >= Number(body.meta?.total || 0)) break
     }
-    const [[lastSourceSync]] = await pool.execute("SELECT val FROM app_settings WHERE setting_key='attendance_last_source_sync'")
-    if (sourceSync && lastSourceSync?.val === sourceSync) return
     const [drivers] = await pool.query("SELECT id,name FROM users WHERE role='DRIVER' AND active=TRUE")
     const conn = await pool.getConnection()
     try {
       await conn.beginTransaction()
-      for (const driver of drivers) await conn.execute('UPDATE users SET availability_status=? WHERE id=?', [attendanceStatus(driver.name, scansByName), driver.id])
+      for (const driver of drivers) await conn.execute('UPDATE users SET availability_status=? WHERE id=?', [attendanceStatus(driver.name, scansByName, currentHour), driver.id])
       await conn.execute("INSERT INTO app_settings(setting_key,val) VALUES('attendance_last_sync_date',?) ON DUPLICATE KEY UPDATE val=VALUES(val)", [date])
       if (sourceSync) await conn.execute("INSERT INTO app_settings(setting_key,val) VALUES('attendance_last_source_sync',?) ON DUPLICATE KEY UPDATE val=VALUES(val)", [sourceSync])
       await conn.commit()
