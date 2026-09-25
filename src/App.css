@@ -1068,6 +1068,20 @@ label.upload { display: grid }
 .report-photo-download { width: 100%; text-decoration: none }
 .report-photo-error { min-height: 180px; display: grid; place-content: center; gap: 4px; padding: 20px; text-align: center; border: 1px dashed var(--line); border-radius: var(--radius-sm); background: #f5f7f5 }
 .report-photo-error small { color: var(--muted); font-size: 12px }
+
+/* ─── driver report picker ────────────────────────── */
+.driver-report-picker-list { display: grid; gap: 10px; padding: 6px 0 14px }
+.driver-report-picker-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 16px; border: 1.5px solid var(--line); border-radius: var(--radius);
+  background: #ffffff; cursor: pointer; text-align: left; transition: all .15s ease;
+  width: 100%; color: var(--ink);
+}
+.driver-report-picker-card:hover { border-color: var(--green); background: #f8fcf9 }
+.driver-report-picker-info { display: flex; align-items: center; gap: 12px; min-width: 0 }
+.driver-report-picker-info b { display: block; font-size: 15px; font-weight: 700; color: var(--ink) }
+.driver-report-picker-info small { color: var(--muted); font-size: 12px }
+.driver-report-picker-arrow { color: var(--green); font-size: 13px; font-weight: 700; flex-shrink: 0 }
 .admin-page .user-row-actions button, .admin-row-actions button { min-height: 44px }
 
 @media (max-width: 768px) {
