@@ -261,8 +261,8 @@ export async function handler(req, res) {
     if (req.method === 'GET' && p === '/api/public/drivers') {
       const [[guestRow]] = await pool.query("SELECT val FROM app_settings WHERE setting_key='guest_mode'")
       if (!guestRow || guestRow.val !== 'true') return json(res, 403, { error: 'Guest mode tidak aktif' })
-      const [rows] = await pool.query("SELECT id,name FROM users WHERE role='DRIVER' AND active=TRUE ORDER BY name")
-      return json(res, 200, { drivers: rows.map(x => ({ ...x, id: Number(x.id) })) })
+      const [rows] = await pool.query("SELECT id,name,availability_status FROM users WHERE role='DRIVER' AND active=TRUE ORDER BY name")
+      return json(res, 200, { drivers: rows.map(x => ({ id: Number(x.id), name: x.name, availability_status: x.availability_status })) })
     }
 
     if (req.method === 'GET' && p === '/api/public/divisions') {

@@ -25,7 +25,7 @@ export type TaskDraft = {
   urgentDeadline?: string | null
   scheduledAt?: string | null
 }
-export type DriverOption = { id: number; name: string }
+export type DriverOption = { id: number; name: string; availability_status?: 'AVAILABLE' | 'ON_LEAVE' | 'OFF_DUTY'; status?: string }
 export type Notification = { id: number; type: string; taskId: number; message: string; read_at: string | null; created_at: string }
 export type DriverLocation = { driverId: number; driverName: string; taskId: number | null; latitude: number; longitude: number; accuracy: number | null; updatedAt: number; taskTitle?: string | null; requester?: string | null; destination?: string | null; address?: string | null; division?: string | null }
 export type Division = { id: number; name: string; active: boolean }

@@ -508,6 +508,58 @@ a { color: var(--green) }
 .guest-file-copy small { color: var(--muted); font-size: 12px; font-weight: 400 }
 .guest-file-action { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 14px; border-radius: var(--radius-sm); color: var(--green); background: var(--paper); border: 1px solid #bfd5c7; font-size: 12px; font-weight: 700 }
 
+/* ─── guest driver picker & status ────────────────── */
+.guest-driver-picker-group { display: grid; gap: 8px }
+.guest-driver-picker-header { display: flex; justify-content: space-between; align-items: baseline }
+.guest-driver-picker-header label { font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--muted) }
+.guest-driver-picker-header small { font-size: 12px; color: var(--green); font-weight: 600 }
+.guest-driver-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px }
+.guest-driver-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 12px 14px; border-radius: var(--radius); border: 1.5px solid var(--line);
+  background: #ffffff; cursor: pointer; text-align: left; transition: all .15s ease;
+  min-height: 64px; color: var(--ink);
+}
+.guest-driver-item:hover { border-color: #a4c9b3; background: #fbfdfc }
+.guest-driver-item.selected { border-color: var(--green); background: #f1f8f3; box-shadow: 0 0 0 1px var(--green) }
+.guest-driver-item.off-duty:not(.selected) { opacity: .75; background: #fafafa }
+.guest-driver-item.on-leave:not(.selected) { opacity: .7; background: #fbf9f8 }
+.guest-driver-item-main { display: flex; align-items: center; gap: 10px; min-width: 0 }
+.guest-driver-avatar-wrap { position: relative; flex-shrink: 0 }
+.driver-green-logo {
+  position: absolute; bottom: -1px; right: -1px; width: 10px; height: 10px;
+  border-radius: 50%; background: #27ae60; border: 2px solid white;
+}
+.guest-driver-item-text { display: grid; gap: 2px; min-width: 0 }
+.guest-driver-item-text b { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.guest-driver-tag {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600;
+  border-radius: 12px; padding: 2px 8px; width: fit-content;
+}
+.guest-driver-tag.tag-available { background: var(--green-light); color: var(--green) }
+.guest-driver-tag.tag-off-duty { background: #f0f0f0; color: #777 }
+.guest-driver-tag.tag-on-leave { background: #fde8e8; color: #c0392b }
+.driver-green-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: #27ae60;
+  animation: blink 2s infinite; flex-shrink: 0;
+}
+.guest-driver-check {
+  width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid #c9d6cf;
+  display: grid; place-items: center; font-size: 12px; font-weight: 800; color: transparent;
+  flex-shrink: 0;
+}
+.guest-driver-check.active { background: var(--green); border-color: var(--green); color: white }
+
+.guest-driver-status-panel { padding: 0 0 6px }
+.guest-driver-status-list { display: grid; gap: 4px; padding: 10px 20px 16px }
+.guest-driver-status-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid var(--line);
+}
+.guest-driver-status-row:last-child { border-bottom: none }
+.guest-driver-status-name { flex: 1; min-width: 0 }
+.guest-driver-status-name b { font-size: 14px; font-weight: 600 }
+
 /* ─── photos ──────────────────────────────────────── */
 .upload {
   display: grid; place-items: center; align-content: center; gap: 6px;

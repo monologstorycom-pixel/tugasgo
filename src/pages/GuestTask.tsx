@@ -91,7 +91,8 @@ export default function GuestTask() {
       ]).then(([d, div]) => {
         setDrivers(d.drivers)
         setDivisions(div.divisions)
-        setAssigneeId(d.drivers[0]?.id || 0)
+        const defaultDriver = d.drivers.find(x => x.availability_status === 'AVAILABLE') || d.drivers[0]
+        setAssigneeId(defaultDriver?.id || 0)
         setDivisionId(div.divisions[0]?.id || 0)
       })
     }).catch(() => setNotAvailable(true))
@@ -216,20 +217,55 @@ export default function GuestTask() {
             Nama Anda
             <input value={guestName} onChange={e => setGuestName(e.target.value)} placeholder="Nama lengkap" required autoFocus />
           </label>
-          <div className="form-grid">
-            <label>Divisi
-              <select value={divisionId} onChange={e => setDivisionId(Number(e.target.value))}>
-                {divisions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-            </label>
-            <label>Driver
-              {drivers.length === 1
-                ? <input value={drivers[0]?.name || ''} disabled />
-                : <select value={assigneeId} onChange={e => setAssigneeId(Number(e.target.value))}>
-                    {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
-              }
-            </label>
+          <label>Divisi
+            <select value={divisionId} onChange={e => setDivisionId(Number(e.target.value))}>
+              {divisions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </label>
+          <div className="guest-driver-picker-group">
+            <div className="guest-driver-picker-header">
+              <label>Pilih Driver</label>
+              <small>{drivers.filter(d => d.availability_status === 'AVAILABLE').length} driver aktif</small>
+            </div>
+            <div className="guest-driver-grid">
+              {drivers.map(d => {
+                const isAvail = d.availability_status === 'AVAILABLE'
+                const isOff = d.availability_status === 'OFF_DUTY'
+                const isSelected = assigneeId === d.id
+                return (
+                  <button
+                    key={d.id}
+                    type="button"
+                    className={`guest-driver-item ${isSelected ? 'selected' : ''} ${isAvail ? 'available' : isOff ? 'off-duty' : 'on-leave'}`}
+                    onClick={() => setAssigneeId(d.id)}
+                  >
+                    <div className="guest-driver-item-main">
+                      <div className="guest-driver-avatar-wrap">
+                        <span className={`avatar ${isAvail ? 'avatar-active' : ''}`}>{d.name.charAt(0)}</span>
+                        {isAvail && <span className="driver-green-logo" title="Masuk & Aktif" />}
+                      </div>
+                      <div className="guest-driver-item-text">
+                        <b>{d.name}</b>
+                        {isAvail ? (
+                          <span className="guest-driver-tag tag-available">
+                            <i className="driver-green-dot" /> Masuk & Aktif
+                          </span>
+                        ) : isOff ? (
+                          <span className="guest-driver-tag tag-off-duty">
+                            Sudah pulang
+                          </span>
+                        ) : (
+                          <span className="guest-driver-tag tag-on-leave">
+                            Libur / tidak masuk
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span className={`guest-driver-check ${isSelected ? 'active' : ''}`}>{isSelected ? '✓' : ''}</span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
           <label>Prioritas
             <select value={priority} onChange={e => setPriority(e.target.value as 'NORMAL' | 'URGENT')}>
@@ -298,6 +334,39 @@ export default function GuestTask() {
               <div className="section-title"><div><h2>Peta posisi driver</h2></div><span className="live"><i /> Live</span></div>
               <LiveMap driverLocations={driverLocations} tasks={[]} />
             </section>
+            {drivers.length > 0 && <section className="panel guest-driver-status-panel" style={{ marginBottom: 20 }}>
+              <div className="section-title"><div><h2>Status driver hari ini</h2></div></div>
+              <div className="guest-driver-status-list">
+                {drivers.map(d => {
+                  const isAvail = d.availability_status === 'AVAILABLE'
+                  const isOff = d.availability_status === 'OFF_DUTY'
+                  return (
+                    <div className="guest-driver-status-row" key={d.id}>
+                      <div className="guest-driver-avatar-wrap">
+                        <span className={`avatar ${isAvail ? 'avatar-active' : ''}`}>{d.name.charAt(0)}</span>
+                        {isAvail && <span className="driver-green-logo" title="Masuk & Aktif" />}
+                      </div>
+                      <div className="guest-driver-status-name">
+                        <b>{d.name}</b>
+                      </div>
+                      {isAvail ? (
+                        <span className="guest-driver-tag tag-available">
+                          <i className="driver-green-dot" /> Masuk & Aktif
+                        </span>
+                      ) : isOff ? (
+                        <span className="guest-driver-tag tag-off-duty">
+                          Sudah pulang
+                        </span>
+                      ) : (
+                        <span className="guest-driver-tag tag-on-leave">
+                          Libur / tidak masuk
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </section>}
             {driverLocations.length > 0 && <section className="panel driver-activity" style={{ marginBottom: 20 }}>
               <div className="section-title"><div><h2>Posisi driver</h2></div></div>
               <div className="driver-location-list">
