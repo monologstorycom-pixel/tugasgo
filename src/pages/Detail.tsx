@@ -190,19 +190,19 @@ export default function Detail({ task, role, onBack, onUpdate }: {
 
         {role === 'Driver' && task.status === 'WAITING' ? (
           <div className="action-stack">
-            {task.scheduledAt && Date.now() < task.scheduledAt && (
+            {task.scheduledAt && (
               <div className="scheduled-notice">
                 <span>🗓</span>
                 <div>
                   <b>Tugas terjadwal</b>
-                  <small>Mulai: {dateTime(task.scheduledAt)}</small>
+                  <small>Jadwal pengerjaan: {dateTime(task.scheduledAt)}</small>
                 </div>
               </div>
             )}
             {error && <p className="error">{error}</p>}
             <button
               className="primary full"
-              disabled={busy || (task.scheduledAt != null && Date.now() < task.scheduledAt)}
+              disabled={busy}
               onClick={async () => {
                 setBusy(true); setError('')
                 try { await onUpdate(task.id, { status: 'IN_PROGRESS' }) }
@@ -210,7 +210,7 @@ export default function Detail({ task, role, onBack, onUpdate }: {
                 finally { setBusy(false) }
               }}
             >
-              {busy ? 'Memproses…' : task.scheduledAt && Date.now() < task.scheduledAt ? `Belum bisa dimulai` : 'Mulai tugas'}
+              {busy ? 'Memproses…' : 'Mulai tugas'}
             </button>
             <button className="danger secondary full" disabled={busy} onClick={() => setMode('cancel')}>Batalkan tugas</button>
           </div>
