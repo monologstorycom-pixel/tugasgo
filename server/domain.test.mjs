@@ -18,13 +18,16 @@ test('session token is random and only its digest is persisted', () => {
 })
 
 test('only assigned driver can perform valid task transitions', () => {
-  const task = { status:'WAITING', assigneeId:7 }
+  const task = { status:'WAITING', assigneeId:7, divisionId:2, creatorId:10 }
   assert.equal(canTransition({ id:7, role:'DRIVER' }, task, 'IN_PROGRESS'), true)
   assert.equal(canTransition({ id:8, role:'DRIVER' }, task, 'IN_PROGRESS'), false)
   assert.equal(canTransition({ id:7, role:'STAFF' }, task, 'IN_PROGRESS'), false)
   assert.equal(canTransition({ id:7, role:'DRIVER' }, task, 'COMPLETED'), false)
   assert.equal(canTransition({ id:7, role:'DRIVER' }, { ...task, status:'IN_PROGRESS' }, 'COMPLETED'), true)
   assert.equal(canTransition({ id:7, role:'DRIVER' }, task, 'CANCELLED'), true)
+  assert.equal(canTransition({ id:10, role:'STAFF', divisionId:2 }, task, 'CANCELLED'), true)
+  assert.equal(canTransition({ id:99, role:'ADMIN' }, task, 'CANCELLED'), true)
+  assert.equal(canTransition({ id:11, role:'STAFF', divisionId:3 }, task, 'CANCELLED'), false)
 })
 
 test('location validation enforces geographic ranges and accuracy', () => {

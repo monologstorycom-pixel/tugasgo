@@ -214,6 +214,11 @@ export default function Detail({ task, role, onBack, onUpdate }: {
             </button>
             <button className="danger secondary full" disabled={busy} onClick={() => setMode('cancel')}>Batalkan tugas</button>
           </div>
+        ) : (role === 'Staff' || role === 'Admin') && task.status === 'WAITING' ? (
+          <div className="action-stack">
+            {error && <p className="error">{error}</p>}
+            <button className="danger secondary full" disabled={busy} onClick={() => setMode('cancel')}>Batalkan tugas</button>
+          </div>
         ) : role === 'Driver' && task.status === 'IN_PROGRESS' ? (
           <button className="primary full" onClick={() => setMode('complete')}>Selesaikan tugas</button>
         ) : task.status === 'COMPLETED' ? (

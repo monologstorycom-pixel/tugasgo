@@ -187,7 +187,6 @@ export function CreateTask({ user, onCreate, onCancel, drivers, divisions }: {
   const [destination, setDestination] = useState('')
   const [address, setAddress] = useState('')
   const [priority, setPriority] = useState<import('../types').Priority>('NORMAL')
-  const [urgentDeadline, setUrgentDeadline] = useState('')
   const [scheduledAt, setScheduledAt] = useState('')
   const [description, setDescription] = useState('')
   const [refFile, setRefFile] = useState<File | null>(null)
@@ -216,7 +215,7 @@ export function CreateTask({ user, onCreate, onCancel, drivers, divisions }: {
       let referencePhoto: string | undefined
       if (refFile) referencePhoto = await uploadPhoto(refFile, 'REFERENCE')
       const div = divisions.find(d => d.id === divisionId)
-      await onCreate({ title: title.trim(), destination: destination.trim(), address: address.trim(), priority, description: description.trim() || 'Tidak ada detail tambahan.', division: div?.name || '', assignee: drivers.find(d => d.id === assigneeId)?.name || '', assigneeId, latitude: lat, longitude: lng, referencePhoto, urgentDeadline: priority === 'URGENT' && urgentDeadline ? urgentDeadline : null, scheduledAt })
+      await onCreate({ title: title.trim(), destination: destination.trim(), address: address.trim(), priority, description: description.trim() || 'Tidak ada detail tambahan.', division: div?.name || '', assignee: drivers.find(d => d.id === assigneeId)?.name || '', assigneeId, latitude: lat, longitude: lng, referencePhoto, scheduledAt })
     } catch (e) { setError(e instanceof Error ? e.message : 'Gagal membuat task') }
     finally { setBusy(false) }
   }
@@ -240,18 +239,6 @@ export function CreateTask({ user, onCreate, onCancel, drivers, divisions }: {
           </label>
         </div>
         <label>Prioritas<select value={priority} onChange={e => setPriority(e.target.value as import('../types').Priority)}><option>NORMAL</option><option>URGENT</option></select></label>
-        {priority === 'URGENT' && (
-          <label>
-            Estimasi batas waktu
-            <input
-              type="datetime-local"
-              value={urgentDeadline}
-              onChange={e => setUrgentDeadline(e.target.value)}
-              min={new Date().toISOString().slice(0, 16)}
-            />
-            <small className="muted">Driver harus menyelesaikan sebelum waktu ini. Lewat batas akan ditandai.</small>
-          </label>
-        )}
         <label>Cari lokasi tujuan<PlacesAutocomplete onSelect={handlePlaceSelect} /></label>
         {destination && <div className="selected-place"><b>{destination}</b><span>{address}</span>{lat && lng && <small>{lat.toFixed(6)}, {lng.toFixed(6)}</small>}</div>}
         {lat && lng ? <MapEmbed lat={lat} lng={lng} height={200} /> : <MapPlaceholder label="Belum ada lokasi dipilih" />}

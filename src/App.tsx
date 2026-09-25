@@ -112,7 +112,7 @@ export default function App() {
   }
 
   const create = async (data: TaskDraft & { assigneeId: number }) => {
-    const { task } = await request<{ task: Task }>('/tasks', { method: 'POST', body: JSON.stringify({ title: data.title, description: data.description, priority: data.priority, assigneeId: data.assigneeId, locationName: data.destination, address: data.address, referencePhoto: data.referencePhoto, latitude: data.latitude, longitude: data.longitude, urgentDeadline: data.urgentDeadline || null, scheduledAt: data.scheduledAt || null, divisionId: divisions.find(d => d.name === data.division)?.id }) })
+    const { task } = await request<{ task: Task }>('/tasks', { method: 'POST', body: JSON.stringify({ title: data.title, description: data.description, priority: data.priority, assigneeId: data.assigneeId, locationName: data.destination, address: data.address, referencePhoto: data.referencePhoto, latitude: data.latitude, longitude: data.longitude, scheduledAt: data.scheduledAt, divisionId: divisions.find(d => d.name === data.division)?.id }) })
     setTasks(t => [task, ...t]); navigate('dashboard'); notify('Tugas baru dibuat.')
   }
 

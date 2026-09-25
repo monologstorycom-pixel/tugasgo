@@ -24,8 +24,15 @@ export const createToken = () => randomBytes(32).toString('hex')
 export const hashToken = token => createHash('sha256').update(token).digest('hex')
 
 export function canTransition(user, task, next) {
+  if (next === 'CANCELLED') {
+    if (task.status !== 'WAITING') return false
+    if (user.role === 'ADMIN') return true
+    if (user.role === 'STAFF') return Number(task.divisionId) === Number(user.divisionId) || Number(task.creatorId) === Number(user.id)
+    if (user.role === 'DRIVER') return Number(task.assigneeId) === Number(user.id)
+    return false
+  }
   if (user.role !== 'DRIVER' || Number(task.assigneeId) !== Number(user.id)) return false
-  return (task.status === 'WAITING' && ['IN_PROGRESS','CANCELLED'].includes(next)) ||
+  return (task.status === 'WAITING' && next === 'IN_PROGRESS') ||
     (task.status === 'IN_PROGRESS' && next === 'COMPLETED')
 }
 

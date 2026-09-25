@@ -53,7 +53,6 @@ export default function GuestTask() {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState<'NORMAL' | 'URGENT'>('NORMAL')
-  const [urgentDeadline, setUrgentDeadline] = useState('')
   const [scheduledAt, setScheduledAt] = useState('')
   const [destination, setDestination] = useState('')
   const [address, setAddress] = useState('')
@@ -177,7 +176,6 @@ export default function GuestTask() {
           title: title.trim(),
           description: description.trim() || 'Tidak ada detail tambahan.',
           priority,
-          urgentDeadline: priority === 'URGENT' && urgentDeadline ? urgentDeadline : null,
           scheduledAt,
           assigneeId,
           divisionId,
@@ -313,12 +311,6 @@ export default function GuestTask() {
               <option value="URGENT">URGENT</option>
             </select>
           </label>
-          {priority === 'URGENT' && (
-            <label>
-              Estimasi batas waktu
-              <input type="datetime-local" value={urgentDeadline} onChange={e => setUrgentDeadline(e.target.value)} min={new Date().toISOString().slice(0, 16)} />
-            </label>
-          )}
           <label>Cari lokasi tujuan
             <PlacesAutocomplete onSelect={handlePlaceSelect} />
           </label>
