@@ -116,6 +116,16 @@ const rowTask = row => ({
   durationSeconds: row.started_at && row.completed_at
     ? Math.floor((new Date(row.completed_at) - new Date(row.started_at)) / 1000) : null,
 })
+const photoUrl = async value => {
+  if (!value || /^https?:\/\//i.test(value) || value.startsWith('blob:') || !gcsBucket) return value
+  const [url] = await gcsBucket.file(value).getSignedUrl({ action: 'read', expires: Date.now() + 60 * 60 * 1000 })
+  return url
+}
+const presentTask = async task => ({
+  ...task,
+  referencePhoto: await photoUrl(task.referencePhoto),
+  photos: await Promise.all((task.photos || []).map(photoUrl)),
+})
 const taskSelect = `SELECT t.*,COALESCE(t.guest_creator_name,creator.name) requester,d.name division,assignee.name assignee
   FROM tasks t
   JOIN users creator ON creator.id=t.creator_id
@@ -201,7 +211,7 @@ async function notifyTaskEvent(taskId, type, actorId) {
   // broadcast realtime
   broadcast([...recipientIds], 'notification', { type, taskId, message: msg })
   // broadcast task update ke semua yang bisa lihat
-  broadcast([task.creatorId, task.assigneeId, ...admins.map(a => Number(a.id))], 'task_updated', { task })
+  broadcast([task.creatorId, task.assigneeId, ...admins.map(a => Number(a.id))], 'task_updated', { task: await presentTask(task) })
 }
 
 // ─── HTTP handler ─────────────────────────────────────────────────────────────
@@ -277,7 +287,7 @@ export async function handler(req, res) {
          WHERE t.created_at>=CURRENT_DATE() AND t.created_at<DATE_ADD(CURRENT_DATE(),INTERVAL 1 DAY)
          ORDER BY t.created_at DESC`
       )
-      return json(res, 200, { tasks: rows.map(row => ({
+      return json(res, 200, { tasks: await Promise.all(rows.map(async row => ({
         title: row.title,
         status: row.status,
         priority: row.priority,
@@ -287,11 +297,11 @@ export async function handler(req, res) {
         created: new Date(row.created_at).getTime(),
         startedAt: row.started_at ? new Date(row.started_at).getTime() : null,
         scheduledAt: row.scheduled_at ? new Date(row.scheduled_at).getTime() : null,
-        referencePhoto: row.reference_photo,
-        photos: typeof row.completion_photos === 'string' ? JSON.parse(row.completion_photos) : row.completion_photos,
+        referencePhoto: await photoUrl(row.reference_photo),
+        photos: await Promise.all((typeof row.completion_photos === 'string' ? JSON.parse(row.completion_photos) : row.completion_photos || []).map(photoUrl)),
         note: row.completion_note,
         cancelReason: row.cancel_reason,
-      })) })
+      }))) })
     }
 
     if (req.method === 'GET' && p === '/api/public/driver-locations') {
@@ -521,7 +531,7 @@ export async function handler(req, res) {
         taskParams
       )
       return json(res, 200, {
-        tasks: tasks.map(rowTask),
+        tasks: await Promise.all(tasks.map(row => presentTask(rowTask(row)))),
         driverLocations: locations.map(l => ({
           driverId: Number(l.driver_id), driverName: l.driver_name,
           taskId: l.task_id ? Number(l.task_id) : null,
@@ -551,7 +561,7 @@ export async function handler(req, res) {
         `${taskSelect}${where} ORDER BY CASE t.status WHEN 'IN_PROGRESS' THEN 0 WHEN 'WAITING' THEN 1 ELSE 2 END,CASE t.priority WHEN 'URGENT' THEN 0 ELSE 1 END,t.created_at ASC`,
         params
       )
-      return json(res, 200, { tasks: rows.map(rowTask) })
+      return json(res, 200, { tasks: await Promise.all(rows.map(row => presentTask(rowTask(row)))) })
     }
 
     if (req.method === 'POST' && p === '/api/tasks') {
@@ -582,7 +592,7 @@ export async function handler(req, res) {
         await conn.execute("INSERT INTO task_events(task_id,actor_id,event_type) VALUES(?,?,'TASK_CREATED')", [result.insertId, user.id])
         await conn.commit()
         await notifyTaskEvent(result.insertId, 'TASK_CREATED', user.id)
-        return json(res, 201, { task: await getTask(result.insertId) })
+        return json(res, 201, { task: await presentTask(await getTask(result.insertId)) })
       } catch (e) { await conn.rollback(); throw e } finally { conn.release() }
     }
 
@@ -600,7 +610,7 @@ export async function handler(req, res) {
           `SELECT te.*,u.name actor_name FROM task_events te JOIN users u ON u.id=te.actor_id WHERE te.task_id=? ORDER BY te.created_at ASC`,
           [id]
         )
-        return json(res, 200, { task, events: events.map(e => ({ ...e, id: Number(e.id), taskId: Number(e.task_id), actorId: Number(e.actor_id) })) })
+        return json(res, 200, { task: await presentTask(task), events: events.map(e => ({ ...e, id: Number(e.id), taskId: Number(e.task_id), actorId: Number(e.actor_id) })) })
       }
 
       if (req.method === 'PATCH' && taskMatch[2]) {
@@ -630,7 +640,7 @@ export async function handler(req, res) {
           await conn.execute('INSERT INTO task_events(task_id,actor_id,event_type,metadata) VALUES(?,?,?,?)', [id, user.id, eventType, JSON.stringify(b)])
           await conn.commit()
           await notifyTaskEvent(id, eventType, user.id)
-          return json(res, 200, { task: await getTask(id) })
+          return json(res, 200, { task: await presentTask(await getTask(id)) })
         } catch (e) { await conn.rollback(); throw e } finally { conn.release() }
       }
     }
@@ -736,18 +746,18 @@ export async function handler(req, res) {
       let where = 'WHERE t.assignee_id=?'
       const params = [user.id]
       if (status && status !== 'ALL') { where += ' AND t.status=?'; params.push(status) }
-      if (from) { where += ' AND t.created_at>=?'; params.push(new Date(from)) }
-      if (to) { where += ' AND t.created_at<=?'; params.push(new Date(to + 'T23:59:59')) }
+      if (from) { where += ' AND t.created_at>=?'; params.push(`${from} 00:00:00`) }
+      if (to) { where += ' AND t.created_at<DATE_ADD(?,INTERVAL 1 DAY)'; params.push(`${to} 00:00:00`) }
 
       const [rows] = await pool.execute(`${taskSelect} ${where} ORDER BY t.created_at DESC`, params)
-      const tasks = rows.map(rowTask)
+      const tasks = await Promise.all(rows.map(row => presentTask(rowTask(row))))
 
       const hDur = (s) => {
         if (!s || s <= 0) return '—'
         const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60)
         if (d > 0) return `${d} hari ${h} jam ${m} menit`
         if (h > 0) return `${h} jam ${m} menit`
-        return `${m} menit`
+        return m > 0 ? `${m} menit` : '< 1 menit'
       }
       const fmt = (ts) => ts ? new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(ts)) : '—'
 
@@ -756,9 +766,9 @@ export async function handler(req, res) {
       const ws = wb.addWorksheet('Laporan Tugas')
 
       // title
-      ws.mergeCells('A1:M1')
+      ws.mergeCells('A1:N1')
       Object.assign(ws.getCell('A1'), { value: `Laporan Tugas — ${user.name}`, font: { bold: true, size: 14 }, alignment: { horizontal: 'center' } })
-      ws.mergeCells('A2:M2')
+      ws.mergeCells('A2:N2')
       Object.assign(ws.getCell('A2'), { value: `Diekspor: ${fmt(Date.now())}`, font: { size: 10, color: { argb: 'FF888888' } }, alignment: { horizontal: 'center' } })
 
       // columns
@@ -813,12 +823,12 @@ export async function handler(req, res) {
           set(6, '—', { horizontal: 'center' }).font = { size: 10, color: { argb: 'FFCCCCCC' } }
         }
 
-        set(7, t.status.replace('_', ' '), { horizontal: 'center' }).font = { bold: true, size: 10, color: { argb: sColor } }
+        set(7, ({ WAITING: 'Menunggu', IN_PROGRESS: 'Berjalan', COMPLETED: 'Selesai', CANCELLED: 'Dibatalkan' })[t.status] || t.status, { horizontal: 'center' }).font = { bold: true, size: 10, color: { argb: sColor } }
         set(8, fmt(t.created), { horizontal: 'center' }).font = { size: 10 }
         set(9, fmt(t.startedAt), { horizontal: 'center' }).font = { size: 10 }
         set(10, fmt(t.completedAt || t.cancelledAt), { horizontal: 'center' }).font = { size: 10 }
         set(11, hDur(t.durationSeconds), { horizontal: 'center' }).font = { size: 10 }
-        set(12, t.note || t.cancelReason || '—').font = { size: 10 }
+        set(12, [t.note && `Catatan: ${t.note}`, t.cancelReason && `Alasan batal: ${t.cancelReason}`].filter(Boolean).join('\n') || '—').font = { size: 10 }
 
         // foto referensi — hyperlink
         const refCell = set(13, t.referencePhoto ? 'Lihat foto ↗' : '—', { horizontal: 'center' })

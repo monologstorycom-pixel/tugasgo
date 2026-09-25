@@ -139,7 +139,7 @@ export default function GuestTask() {
         const upload = await fetch(`${API}/public/upload`, { method: 'POST', body: form })
         const uploadBody = await upload.json().catch(() => ({}))
         if (!upload.ok) throw new Error(uploadBody.error || 'Upload foto gagal')
-        referencePhoto = uploadBody.url
+        referencePhoto = uploadBody.key || uploadBody.url
       }
       const res = await fetch(`${API}/public/tasks`, {
         method: 'POST',

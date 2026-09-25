@@ -31,8 +31,8 @@ export async function uploadPhoto(file: File, photoType: 'REFERENCE' | 'COMPLETI
   const res = await fetch(`${API}/upload`, { method: 'POST', credentials: 'include', body: form })
   const body = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(body.error || 'Upload gagal')
-  if (body.placeholder || !body.url) return URL.createObjectURL(file)
-  return body.url as string
+  if (body.placeholder || (!body.key && !body.url)) return URL.createObjectURL(file)
+  return (body.key || body.url) as string
 }
 
 export const roleName = (role: 'STAFF' | 'DRIVER' | 'ADMIN') =>

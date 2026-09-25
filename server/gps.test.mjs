@@ -17,6 +17,12 @@ test('staff location visibility follows task ownership', () => {
   assert.doesNotMatch(app, /role IN \('ADMIN','STAFF'\).*driver_location/s)
 })
 
+test('photo uploads persist stable keys and API responses refresh signed URLs', () => {
+  assert.match(app, /return json\(res, 200, \{ url: signedUrl, key \}\)/)
+  assert.match(app, /const presentTask = async task/)
+  assert.match(app, /referencePhoto: await photoUrl\(task\.referencePhoto\)/)
+})
+
 test('browser tracking reports poor accuracy and uses continuous location updates', () => {
   assert.match(hooks, /watchPosition/)
   assert.match(hooks, /accuracy > 100 \? 'warning' : 'active'/)
