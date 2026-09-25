@@ -146,67 +146,70 @@ export default function Shell({ user, role, view, setView, logout, notifCount, n
                 {notifCount > 0 && <span className="notif-badge">{notifCount > 99 ? '99+' : notifCount}</span>}
               </button>
               {notifOpen && (
-                <div className="notif-panel" role="dialog" aria-label="Daftar Notifikasi">
-                  <div className="notif-panel-head">
-                    <div className="notif-panel-title">
-                      <b>Notifikasi</b>
-                      {notifCount > 0 && <span className="notif-pill">{notifCount} baru</span>}
-                    </div>
-                    <div className="notif-panel-actions">
-                      {notifCount > 0 && (
-                        <button type="button" className="notif-mark-btn" onClick={onMarkRead} title="Tandai semua telah dibaca">
-                          Tandai dibaca
-                        </button>
-                      )}
-                      <button type="button" className="notif-close-btn" onClick={() => setNotifOpen(false)} aria-label="Tutup">✕</button>
-                    </div>
-                  </div>
-
-                  <div className="notif-tabs">
-                    <button type="button" className={`notif-tab ${tab === 'all' ? 'active' : ''}`} onClick={() => setTab('all')}>
-                      Semua ({notifications.length})
-                    </button>
-                    <button type="button" className={`notif-tab ${tab === 'unread' ? 'active' : ''}`} onClick={() => setTab('unread')}>
-                      Belum dibaca ({unreadItems.length})
-                    </button>
-                  </div>
-
-                  <div className="notif-list">
-                    {displayedItems.length === 0 ? (
-                      <div className="notif-empty">
-                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="notif-empty-icon">
-                          <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                        </svg>
-                        <p>{tab === 'unread' ? 'Semua notifikasi sudah dibaca' : 'Belum ada notifikasi'}</p>
+                <>
+                  <div className="notif-backdrop" onClick={() => setNotifOpen(false)} aria-hidden="true" />
+                  <div className="notif-panel" role="dialog" aria-label="Daftar Notifikasi">
+                    <div className="notif-panel-head">
+                      <div className="notif-panel-title">
+                        <b>Notifikasi</b>
+                        {notifCount > 0 && <span className="notif-pill">{notifCount} baru</span>}
                       </div>
-                    ) : (
-                      displayedItems.map(n => {
-                        const iconData = notifIcon(n.type)
-                        const isUnread = !n.read_at
-                        return (
-                          <button
-                            key={n.id}
-                            type="button"
-                            className={`notif-item ${isUnread ? 'unread' : ''} ${n.taskId ? 'clickable' : ''}`}
-                            onClick={() => handleItemClick(n)}
-                          >
-                            <div className={`notif-item-icon ${iconData.cls}`}>
-                              {iconData.svg}
-                            </div>
-                            <div className="notif-item-body">
-                              <span className="notif-item-msg">{n.message}</span>
-                              <div className="notif-item-meta">
-                                <small>{dateTime(new Date(n.created_at).getTime())}</small>
-                                {n.taskId ? <span className="notif-item-link">Buka tugas ›</span> : null}
-                              </div>
-                            </div>
-                            {isUnread && <span className="notif-dot" title="Belum dibaca" />}
+                      <div className="notif-panel-actions">
+                        {notifCount > 0 && (
+                          <button type="button" className="notif-mark-btn" onClick={onMarkRead} title="Tandai semua telah dibaca">
+                            Tandai dibaca
                           </button>
-                        )
-                      })
-                    )}
+                        )}
+                        <button type="button" className="notif-close-btn" onClick={() => setNotifOpen(false)} aria-label="Tutup">✕</button>
+                      </div>
+                    </div>
+
+                    <div className="notif-tabs">
+                      <button type="button" className={`notif-tab ${tab === 'all' ? 'active' : ''}`} onClick={() => setTab('all')}>
+                        Semua ({notifications.length})
+                      </button>
+                      <button type="button" className={`notif-tab ${tab === 'unread' ? 'active' : ''}`} onClick={() => setTab('unread')}>
+                        Belum dibaca ({unreadItems.length})
+                      </button>
+                    </div>
+
+                    <div className="notif-list">
+                      {displayedItems.length === 0 ? (
+                        <div className="notif-empty">
+                          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="notif-empty-icon">
+                            <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                          </svg>
+                          <p>{tab === 'unread' ? 'Semua notifikasi sudah dibaca' : 'Belum ada notifikasi'}</p>
+                        </div>
+                      ) : (
+                        displayedItems.map(n => {
+                          const iconData = notifIcon(n.type)
+                          const isUnread = !n.read_at
+                          return (
+                            <button
+                              key={n.id}
+                              type="button"
+                              className={`notif-item ${isUnread ? 'unread' : ''} ${n.taskId ? 'clickable' : ''}`}
+                              onClick={() => handleItemClick(n)}
+                            >
+                              <div className={`notif-item-icon ${iconData.cls}`}>
+                                {iconData.svg}
+                              </div>
+                              <div className="notif-item-body">
+                                <span className="notif-item-msg">{n.message}</span>
+                                <div className="notif-item-meta">
+                                  <small>{dateTime(new Date(n.created_at).getTime())}</small>
+                                  {n.taskId ? <span className="notif-item-link">Buka tugas ›</span> : null}
+                                </div>
+                              </div>
+                              {isUnread && <span className="notif-dot" title="Belum dibaca" />}
+                            </button>
+                          )
+                        })
+                      )}
+                    </div>
                   </div>
-                </div>
+                </>
               )}
             </div>
             <button className="mobile-exit" onClick={logout}>Keluar</button>
