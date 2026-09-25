@@ -2,8 +2,10 @@ import { useState } from 'react'
 import type { SessionUser } from '../types'
 import { request } from '../lib/api'
 import { Logo } from './ui'
+import { usePwaInstall } from '../lib/pwa'
 
 export default function Login({ onLogin }: { onLogin: (u: SessionUser, token: string) => void }) {
+  const { isInstallable, install } = usePwaInstall()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -38,6 +40,11 @@ export default function Login({ onLogin }: { onLogin: (u: SessionUser, token: st
           <label>Password<input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" required /></label>
           {error && <p className="error">{error}</p>}
           <button className="primary full" disabled={busy}>{busy ? 'Memproses…' : 'Masuk'}</button>
+          {isInstallable && (
+            <button type="button" className="secondary full" style={{ marginTop: 10 }} onClick={install}>
+              📲 Pasang Aplikasi TugasGo
+            </button>
+          )}
           {import.meta.env.DEV && (
             <div className="dev-logins">
               <p className="eyebrow">DEV — QUICK LOGIN</p>

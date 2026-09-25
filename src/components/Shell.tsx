@@ -3,6 +3,7 @@ import type { Role, View, SessionUser, Notification } from '../types'
 import { Logo, NavIcon } from './ui'
 import { dateTime } from '../lib/api'
 import type { GpsStatus } from '../lib/hooks'
+import { usePwaInstall } from '../lib/pwa'
 
 const NAV: Record<Role, [View, string, string][]> = {
   Staff: [
@@ -30,6 +31,7 @@ export default function Shell({ user, role, view, setView, logout, notifCount, n
   logout: () => void; notifCount: number; notifications: Notification[]; onMarkRead: () => void; gpsStatus?: GpsStatus; children: React.ReactNode
 }) {
   const [notifOpen, setNotifOpen] = useState(false)
+  const { isInstallable, install } = usePwaInstall()
   const items = NAV[role]
   const mobileItems = role === 'Admin' ? items.filter(([v]) => v !== 'history') : items
 
@@ -49,6 +51,13 @@ export default function Shell({ user, role, view, setView, logout, notifCount, n
             </button>
           ))}
         </nav>
+        {isInstallable && (
+          <div style={{ padding: '0 12px 12px' }}>
+            <button type="button" className="pwa-install-aside-btn" onClick={install}>
+              📲 Pasang Aplikasi
+            </button>
+          </div>
+        )}
         <div className="profile">
           <span className="avatar">{user.name[0]}</span>
           <div><b>{user.name}</b><small>{role}</small></div>
@@ -59,6 +68,11 @@ export default function Shell({ user, role, view, setView, logout, notifCount, n
         <header>
           <div className="mobile-logo"><Logo variant="icon" /></div>
           <div className="header-right">
+            {isInstallable && (
+              <button type="button" className="pwa-install-header-btn" onClick={install} title="Pasang TugasGo">
+                📲 Pasang App
+              </button>
+            )}
             {gpsStatus && <span className={`gps-status ${gpsStatus.state}`} role={gpsStatus.state === 'error' || gpsStatus.state === 'warning' ? 'alert' : 'status'}><i />{gpsStatus.message}</span>}
             <div className="notif-wrap">
               <button className="notif-bell" onClick={toggleNotif} title="Notifikasi">

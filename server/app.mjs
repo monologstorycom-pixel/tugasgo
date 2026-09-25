@@ -291,8 +291,12 @@ export async function handler(req, res) {
          JOIN users u ON u.id=t.assignee_id
          JOIN users creator ON creator.id=t.creator_id
          JOIN divisions d ON d.id=t.division_id
-         WHERE t.created_at>=CURRENT_DATE() AND t.created_at<DATE_ADD(CURRENT_DATE(),INTERVAL 1 DAY)
-         ORDER BY t.created_at DESC`
+         WHERE t.status IN ('WAITING','IN_PROGRESS')
+            OR (t.created_at>=CURRENT_DATE() AND t.created_at<DATE_ADD(CURRENT_DATE(),INTERVAL 1 DAY))
+            OR (t.scheduled_at>=CURRENT_DATE() AND t.scheduled_at<DATE_ADD(CURRENT_DATE(),INTERVAL 1 DAY))
+            OR (t.completed_at>=CURRENT_DATE() AND t.completed_at<DATE_ADD(CURRENT_DATE(),INTERVAL 1 DAY))
+            OR (t.cancelled_at>=CURRENT_DATE() AND t.cancelled_at<DATE_ADD(CURRENT_DATE(),INTERVAL 1 DAY))
+         ORDER BY CASE t.status WHEN 'IN_PROGRESS' THEN 0 WHEN 'WAITING' THEN 1 ELSE 2 END, t.created_at DESC`
       )
       return json(res, 200, { tasks: await Promise.all(rows.map(async row => ({
         title: row.title,

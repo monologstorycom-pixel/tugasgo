@@ -6,6 +6,7 @@
 !package-lock.json
 !tsconfig*.json
 !.oxlintrc.json
+!public/manifest.json
 
 # Logs
 logs

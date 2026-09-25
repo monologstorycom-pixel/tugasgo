@@ -4,6 +4,7 @@ import { API, duration } from '../lib/api'
 import { Badge, Logo, MapEmbed, MapPlaceholder, NavIcon, PlacesAutocomplete } from '../components/ui'
 import type { PlaceResult } from '../types'
 import { LiveMap } from './Activity'
+import { usePwaInstall } from '../lib/pwa'
 
 async function publicGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API}${path}`)
@@ -36,6 +37,7 @@ const statusMeta = {
 } as const
 
 export default function GuestTask() {
+  const { isInstallable, install } = usePwaInstall()
   const [tab, setTab] = useState<'create' | 'activity'>('create')
   const [todayTasks, setTodayTasks] = useState<PublicTodayTask[]>([])
   const [driverLocations, setDriverLocations] = useState<DriverLocation[]>([])
@@ -216,6 +218,13 @@ export default function GuestTask() {
         <nav>
           {guestNav.map(([value, path, label]) => <button key={value} className={tab === value ? 'active' : ''} onClick={() => { setTab(value); if (value !== 'create') loadHistory() }}><NavIcon path={path} />{label}</button>)}
         </nav>
+        {isInstallable && (
+          <div style={{ padding: '0 12px 12px' }}>
+            <button type="button" className="pwa-install-aside-btn" onClick={install}>
+              📲 Pasang Aplikasi
+            </button>
+          </div>
+        )}
         <div className="profile guest-profile">
           <span className="avatar">T</span>
           <div><b>Tanpa login</b><small>Guest Mode</small></div>
@@ -225,7 +234,13 @@ export default function GuestTask() {
       <div className="workspace">
         <header>
           <div className="mobile-logo"><Logo variant="icon" /></div>
-          <div />
+          <div className="header-right">
+            {isInstallable && (
+              <button type="button" className="pwa-install-header-btn" onClick={install} title="Pasang TugasGo">
+                📲 Pasang App
+              </button>
+            )}
+          </div>
         </header>
         {tab === 'create' ? <main className="page narrow guest-create-page">
           <section className="guest-hero">
@@ -416,7 +431,15 @@ export default function GuestTask() {
                 return <div className="event" key={`${task.title}-${task.created}-${index}`}>
                   <span className={`event-dot ${task.status.toLowerCase()}`} />
                   <div>
-                    <div><b>{task.title}</b><Badge tone={color}>{label}{task.status === 'IN_PROGRESS' && task.startedAt != null ? ` · ${duration(Math.max(0, Math.floor((clock - task.startedAt) / 1000)))}` : ''}</Badge></div>
+                    <div>
+                      <b>{task.title}</b>
+                      <Badge tone={color}>
+                        {label}{task.status === 'IN_PROGRESS' && task.startedAt != null ? ` · ${duration(Math.max(0, Math.floor((clock - task.startedAt) / 1000)))}` : ''}
+                      </Badge>
+                      {task.scheduledAt && task.status === 'WAITING' && (
+                        <Badge tone="blue">Jadwal: {new Intl.DateTimeFormat('id-ID', { hour: '2-digit', minute: '2-digit' }).format(task.scheduledAt)}</Badge>
+                      )}
+                    </div>
                     <p>{task.division} · {task.requester} · {task.assignee}</p>
                     {task.status === 'CANCELLED' && task.cancelReason && <div className="cancel-reason"><small>ALASAN PEMBATALAN</small><p>{task.cancelReason}</p></div>}
                     <small>{new Intl.DateTimeFormat('id-ID', { hour: '2-digit', minute: '2-digit' }).format(task.created)}</small>
