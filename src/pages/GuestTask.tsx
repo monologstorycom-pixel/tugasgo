@@ -64,6 +64,18 @@ export default function GuestTask() {
   const [preview, setPreview] = useState<{ title: string, photos: string[], note?: string } | null>(null)
   const previewDialog = useRef<HTMLDialogElement>(null)
 
+  const loadDrivers = useCallback(async () => {
+    try {
+      const { drivers: d } = await publicGet<{ drivers: DriverOption[] }>('/public/drivers')
+      setDrivers(d)
+      setAssigneeId(prev => {
+        if (prev && d.some(x => x.id === prev)) return prev
+        const avail = d.find(x => x.availability_status === 'AVAILABLE') || d[0]
+        return avail?.id || 0
+      })
+    } catch { /* ignore background sync error */ }
+  }, [])
+
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true); setHistoryError('')
     try {
@@ -99,6 +111,11 @@ export default function GuestTask() {
   }, [loadHistory])
 
   useEffect(() => {
+    const timer = window.setInterval(loadDrivers, 15000)
+    return () => window.clearInterval(timer)
+  }, [loadDrivers])
+
+  useEffect(() => {
     if (tab !== 'activity') return
     const timer = window.setInterval(loadHistory, 7000)
     return () => window.clearInterval(timer)
@@ -129,6 +146,11 @@ export default function GuestTask() {
     if (!guestName.trim()) { setError('Nama wajib diisi'); return }
     if (!title.trim() || !destination.trim() || !address.trim() || !assigneeId || !divisionId) {
       setError('Semua field wajib diisi'); return
+    }
+    const selDriver = drivers.find(d => d.id === assigneeId)
+    if (selDriver?.availability_status && selDriver.availability_status !== 'AVAILABLE') {
+      const statusLabel = selDriver.availability_status === 'OFF_DUTY' ? 'Sudah Pulang' : 'Libur / Tidak Masuk'
+      if (!window.confirm(`Driver ${selDriver.name} saat ini berstatus "${statusLabel}". Tetap lanjutkan penugasan?`)) return
     }
     setBusy(true); setError('')
     try {

@@ -205,6 +205,11 @@ export function CreateTask({ user, onCreate, onCancel, drivers, divisions }: {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim() || !destination.trim() || !address.trim() || !assigneeId) { setError('Judul, lokasi, alamat, dan driver wajib diisi.'); return }
+    const selDriver = drivers.find(d => d.id === assigneeId)
+    if (selDriver?.availability_status && selDriver.availability_status !== 'AVAILABLE') {
+      const statusLabel = selDriver.availability_status === 'OFF_DUTY' ? 'Sudah Pulang' : 'Libur / Tidak Masuk'
+      if (!window.confirm(`Driver ${selDriver.name} saat ini berstatus "${statusLabel}". Tetap lanjutkan penugasan?`)) return
+    }
     setBusy(true); setError('')
     try {
       let referencePhoto: string | undefined

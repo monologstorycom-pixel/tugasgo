@@ -61,6 +61,18 @@ export default function Admin({ divisions, onReload, onOpenTasks }: { divisions:
 
   const toggle = async (id: number, active: boolean) => { await request(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify({ active }) }); load() }
   const setDriverStatus = async (id: number, status: 'AVAILABLE' | 'ON_LEAVE') => { await request(`/drivers/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }); load() }
+  const [syncing, setSyncing] = useState(false)
+  const syncAttendanceNow = async () => {
+    setSyncing(true); setError('')
+    try {
+      await request('/admin/attendance/sync', { method: 'POST' })
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Sinkronisasi gagal')
+    } finally {
+      setSyncing(false)
+    }
+  }
   const removeUser = async (user: UserRecord) => {
     if (!window.confirm(`Hapus permanen ${user.name}? Semua tugas, notifikasi, dan lokasi terkait ikut terhapus. Tindakan ini tidak dapat dibatalkan.`)) return
     setBusy(true); setError('')
@@ -105,7 +117,10 @@ export default function Admin({ divisions, onReload, onOpenTasks }: { divisions:
               <h2>Status driver</h2>
               <p>{drivers.filter(d => d.active && d.availability_status === 'AVAILABLE').length} aktif · {drivers.filter(d => d.availability_status === 'ON_LEAVE').length} tidak masuk · {drivers.filter(d => d.availability_status === 'OFF_DUTY').length} pulang</p>
             </div>
-            <button className="primary" onClick={() => { setForm(f => ({ ...f, role: 'DRIVER' })); setShowAdd(v => !v); setTab('users') }}>+ Tambah driver</button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="secondary" onClick={syncAttendanceNow} disabled={syncing}>{syncing ? 'Menyinkronkan…' : 'Sync Absensi'}</button>
+              <button className="primary" onClick={() => { setForm(f => ({ ...f, role: 'DRIVER' })); setShowAdd(v => !v); setTab('users') }}>+ Tambah driver</button>
+            </div>
           </div>
           {error && <p className="error admin-error" role="alert">{error}</p>}
           {drivers.length === 0 && <div className="empty"><b>Belum ada driver</b></div>}

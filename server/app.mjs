@@ -257,6 +257,13 @@ export async function handler(req, res) {
       return json(res, 200, { ok: true })
     }
 
+    if (req.method === 'POST' && p === '/api/admin/attendance/sync') {
+      const user = await requireUser(req)
+      requireRole(user, 'ADMIN')
+      await syncAttendance()
+      return json(res, 200, { ok: true, message: 'Sinkronisasi absensi berhasil' })
+    }
+
     // ── public endpoints (guest mode) ─────────────────────────────────────────
     if (req.method === 'GET' && p === '/api/public/drivers') {
       const [[guestRow]] = await pool.query("SELECT val FROM app_settings WHERE setting_key='guest_mode'")
