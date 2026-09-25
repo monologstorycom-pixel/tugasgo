@@ -205,6 +205,7 @@ export function CreateTask({ user, onCreate, onCancel, drivers, divisions }: {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim() || !destination.trim() || !address.trim() || !assigneeId) { setError('Judul, lokasi, alamat, dan driver wajib diisi.'); return }
+    if (!scheduledAt) { setError('Tanggal & jam pengerjaan wajib diisi.'); return }
     const selDriver = drivers.find(d => d.id === assigneeId)
     if (selDriver?.availability_status && selDriver.availability_status !== 'AVAILABLE') {
       const statusLabel = selDriver.availability_status === 'OFF_DUTY' ? 'Sudah Pulang' : 'Libur / Tidak Masuk'
@@ -215,7 +216,7 @@ export function CreateTask({ user, onCreate, onCancel, drivers, divisions }: {
       let referencePhoto: string | undefined
       if (refFile) referencePhoto = await uploadPhoto(refFile, 'REFERENCE')
       const div = divisions.find(d => d.id === divisionId)
-      await onCreate({ title: title.trim(), destination: destination.trim(), address: address.trim(), priority, description: description.trim() || 'Tidak ada detail tambahan.', division: div?.name || '', assignee: drivers.find(d => d.id === assigneeId)?.name || '', assigneeId, latitude: lat, longitude: lng, referencePhoto, urgentDeadline: priority === 'URGENT' && urgentDeadline ? urgentDeadline : null, scheduledAt: scheduledAt || null })
+      await onCreate({ title: title.trim(), destination: destination.trim(), address: address.trim(), priority, description: description.trim() || 'Tidak ada detail tambahan.', division: div?.name || '', assignee: drivers.find(d => d.id === assigneeId)?.name || '', assigneeId, latitude: lat, longitude: lng, referencePhoto, urgentDeadline: priority === 'URGENT' && urgentDeadline ? urgentDeadline : null, scheduledAt })
     } catch (e) { setError(e instanceof Error ? e.message : 'Gagal membuat task') }
     finally { setBusy(false) }
   }
@@ -256,9 +257,9 @@ export function CreateTask({ user, onCreate, onCancel, drivers, divisions }: {
         {lat && lng ? <MapEmbed lat={lat} lng={lng} height={200} /> : <MapPlaceholder label="Belum ada lokasi dipilih" />}
         <label>Instruksi<textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Barang yang dibawa, PIC tujuan, atau catatan lain" rows={4} /></label>
         <label>
-          Jadwalkan tugas
-          <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} min={new Date().toISOString().slice(0, 16)} />
-          <small className="muted">Kosongkan jika ingin driver mulai segera. Isi jika tugas untuk waktu mendatang.</small>
+          Tanggal & Jam Pengerjaan (Wajib)
+          <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} min={new Date().toISOString().slice(0, 16)} required />
+          <small className="muted">Waktu driver menjalankan tugas ini. Jam yang sama tidak bisa bentrok.</small>
         </label>
         <label>Foto referensi<input type="file" accept="image/*" onChange={e => setRefFile(e.target.files?.[0] || null)} /><small>{refFile ? refFile.name : ''}</small></label>
         {error && <p className="error">{error}</p>}

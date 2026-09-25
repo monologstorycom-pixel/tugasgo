@@ -149,6 +149,9 @@ export default function GuestTask() {
     if (!title.trim() || !destination.trim() || !address.trim() || !assigneeId || !divisionId) {
       setError('Semua field wajib diisi'); return
     }
+    if (!scheduledAt) {
+      setError('Tanggal & jam pengerjaan wajib diisi'); return
+    }
     const selDriver = drivers.find(d => d.id === assigneeId)
     if (selDriver?.availability_status && selDriver.availability_status !== 'AVAILABLE') {
       const statusLabel = selDriver.availability_status === 'OFF_DUTY' ? 'Sudah Pulang' : 'Libur / Tidak Masuk'
@@ -175,7 +178,7 @@ export default function GuestTask() {
           description: description.trim() || 'Tidak ada detail tambahan.',
           priority,
           urgentDeadline: priority === 'URGENT' && urgentDeadline ? urgentDeadline : null,
-          scheduledAt: scheduledAt || null,
+          scheduledAt,
           assigneeId,
           divisionId,
           locationName: destination.trim(),
@@ -346,10 +349,10 @@ export default function GuestTask() {
              <span className="guest-file-action">{referenceFile ? 'Ganti' : 'Pilih foto'}</span>
            </label>
            <label>
-             Jadwalkan tugas
-            <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} min={new Date().toISOString().slice(0, 16)} />
-            <small className="muted">Kosongkan jika ingin driver mulai segera.</small>
-          </label>
+             Tanggal & Jam Pengerjaan (Wajib)
+             <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} min={new Date().toISOString().slice(0, 16)} required />
+             <small className="muted">Waktu driver menjalankan tugas. Jam yang sama tidak bisa bentrok.</small>
+           </label>
           {error && <p className="error">{error}</p>}
           <div className="form-actions">
             <button type="button" className="secondary" onClick={() => setTab('activity')}>Batal</button>

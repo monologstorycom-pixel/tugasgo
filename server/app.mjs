@@ -368,8 +368,17 @@ export async function handler(req, res) {
       const lng = b.longitude == null ? null : Number(b.longitude)
       if ((lat != null && (!Number.isFinite(lat) || lat < -90 || lat > 90)) || (lng != null && (!Number.isFinite(lng) || lng < -180 || lng > 180))) return json(res, 400, { error: 'Koordinat tidak valid' })
       const urgentDeadline = b.urgentDeadline ? new Date(b.urgentDeadline) : null
-      const scheduledAt = b.scheduledAt ? new Date(b.scheduledAt) : null
-      if ((urgentDeadline && Number.isNaN(urgentDeadline.getTime())) || (scheduledAt && Number.isNaN(scheduledAt.getTime()))) return json(res, 400, { error: 'Tanggal tidak valid' })
+      if (!b.scheduledAt) return json(res, 400, { error: 'Tanggal & jam pengerjaan wajib diisi' })
+      const scheduledAt = new Date(b.scheduledAt)
+      if (Number.isNaN(scheduledAt.getTime()) || (urgentDeadline && Number.isNaN(urgentDeadline.getTime()))) return json(res, 400, { error: 'Tanggal tidak valid' })
+
+      const [conflict] = await pool.execute(
+        `SELECT id, title FROM tasks WHERE assignee_id=? AND scheduled_at=? AND status IN ('WAITING','IN_PROGRESS') LIMIT 1`,
+        [assigneeId, scheduledAt]
+      )
+      if (conflict.length) {
+        return json(res, 400, { error: `Jam tersebut sudah diambil untuk tugas lain (${conflict[0].title}). Silakan pilih jam/menit yang berbeda.` })
+      }
       const guestName = b.guestName.trim().slice(0, 120)
       const conn = await pool.getConnection()
       try {
@@ -592,7 +601,17 @@ export async function handler(req, res) {
       const lat = b.latitude ? Number(b.latitude) : null
       const lng = b.longitude ? Number(b.longitude) : null
       const urgentDeadline = b.urgentDeadline ? new Date(b.urgentDeadline) : null
-      const scheduledAt = b.scheduledAt ? new Date(b.scheduledAt) : null
+      if (!b.scheduledAt) return json(res, 400, { error: 'Tanggal & jam pengerjaan wajib diisi' })
+      const scheduledAt = new Date(b.scheduledAt)
+      if (Number.isNaN(scheduledAt.getTime()) || (urgentDeadline && Number.isNaN(urgentDeadline.getTime()))) return json(res, 400, { error: 'Tanggal tidak valid' })
+
+      const [conflict] = await pool.execute(
+        `SELECT id, title FROM tasks WHERE assignee_id=? AND scheduled_at=? AND status IN ('WAITING','IN_PROGRESS') LIMIT 1`,
+        [assigneeId, scheduledAt]
+      )
+      if (conflict.length) {
+        return json(res, 400, { error: `Jam tersebut sudah diambil untuk tugas lain (${conflict[0].title}). Silakan pilih jam/menit yang berbeda.` })
+      }
       const conn = await pool.getConnection()
       try {
         await conn.beginTransaction()
