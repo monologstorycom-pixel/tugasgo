@@ -145,8 +145,32 @@ export default function App() {
   else if (role === 'Driver') screen = <DriverDashboard user={user} tasks={tasks} onOpen={open} />
   else screen = <AdminOverview tasks={tasks} driverLocations={driverLocations} />
 
+  const openTaskById = (taskId: number) => {
+    const target = tasks.find(t => t.id === taskId)
+    if (target) {
+      open(target)
+    } else {
+      request<{ tasks: Task[] }>('/tasks').then(({ tasks: fresh }) => {
+        setTasks(fresh)
+        const found = fresh.find(t => t.id === taskId)
+        if (found) open(found)
+      }).catch(() => {})
+    }
+  }
+
   return (
-    <Shell user={user} role={role} view={view} setView={navigate} logout={logout} notifCount={unread} notifications={notifications} onMarkRead={markRead} gpsStatus={user.role === 'DRIVER' && trackingActive ? gpsStatus : undefined}>
+    <Shell
+      user={user}
+      role={role}
+      view={view}
+      setView={navigate}
+      logout={logout}
+      notifCount={unread}
+      notifications={notifications}
+      onMarkRead={markRead}
+      onOpenTask={openTaskById}
+      gpsStatus={user.role === 'DRIVER' && trackingActive ? gpsStatus : undefined}
+    >
       {screen}
       {toast && <div className="toast">✓ {toast}</div>}
     </Shell>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Role, View, SessionUser, Notification } from '../types'
 import { Logo, NavIcon } from './ui'
 import { dateTime } from '../lib/api'
@@ -11,7 +11,6 @@ const NAV: Record<Role, [View, string, string][]> = {
     ['create', 'M12 4v16M4 12h16', 'Buat tugas'],
     ['activity', 'M3 17l4-8 4 4 4-6 4 6', 'Aktivitas'],
     ['history', 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z', 'Riwayat'],
-    ['report', 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6m6 0h10M13 19V9a2 2 0 00-2-2H9m4 12v-4a2 2 0 012-2h2a2 2 0 012 2v4', 'Laporan'],
   ],
   Driver: [
     ['dashboard', 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2', 'Tugas saya'],
@@ -26,19 +25,78 @@ const NAV: Record<Role, [View, string, string][]> = {
   ],
 }
 
-export default function Shell({ user, role, view, setView, logout, notifCount, notifications, onMarkRead, gpsStatus, children }: {
+function notifIcon(type: string) {
+  switch (type) {
+    case 'TASK_COMPLETED':
+      return {
+        cls: 'icon-done',
+        svg: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+      }
+    case 'TASK_CANCELLED':
+      return {
+        cls: 'icon-cancel',
+        svg: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+      }
+    case 'TASK_STARTED':
+    case 'TASK_PROGRESS':
+      return {
+        cls: 'icon-progress',
+        svg: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+      }
+    default:
+      return {
+        cls: 'icon-create',
+        svg: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="12" y1="18" x2="12" y2="12" /><line x1="9" y1="15" x2="15" y2="15" /></svg>
+      }
+  }
+}
+
+export default function Shell({ user, role, view, setView, logout, notifCount, notifications, onMarkRead, onOpenTask, gpsStatus, children }: {
   user: SessionUser; role: Role; view: View; setView: (v: View) => void
-  logout: () => void; notifCount: number; notifications: Notification[]; onMarkRead: () => void; gpsStatus?: GpsStatus; children: React.ReactNode
+  logout: () => void; notifCount: number; notifications: Notification[]; onMarkRead: () => void
+  onOpenTask?: (taskId: number) => void; gpsStatus?: GpsStatus; children: React.ReactNode
 }) {
   const [notifOpen, setNotifOpen] = useState(false)
+  const [tab, setTab] = useState<'all' | 'unread'>('all')
+  const notifRef = useRef<HTMLDivElement>(null)
   const { isInstallable, install } = usePwaInstall()
   const items = NAV[role]
   const mobileItems = role === 'Admin' ? items.filter(([v]) => v !== 'history') : items
 
   const toggleNotif = () => {
-    if (!notifOpen && notifCount > 0) onMarkRead()
     setNotifOpen(v => !v)
   }
+
+  useEffect(() => {
+    if (!notifOpen) return
+    const onDocClick = (e: MouseEvent | TouchEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false)
+      }
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setNotifOpen(false)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    document.addEventListener('touchstart', onDocClick)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onDocClick)
+      document.removeEventListener('touchstart', onDocClick)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [notifOpen])
+
+  const handleItemClick = (n: Notification) => {
+    if (!n.read_at) onMarkRead()
+    if (n.taskId && onOpenTask) {
+      onOpenTask(n.taskId)
+      setNotifOpen(false)
+    }
+  }
+
+  const unreadItems = notifications.filter(n => !n.read_at)
+  const displayedItems = (tab === 'unread' ? unreadItems : notifications).slice(0, 15)
 
   return (
     <div className="shell">
@@ -74,25 +132,80 @@ export default function Shell({ user, role, view, setView, logout, notifCount, n
               </button>
             )}
             {gpsStatus && <span className={`gps-status ${gpsStatus.state}`} role={gpsStatus.state === 'error' || gpsStatus.state === 'warning' ? 'alert' : 'status'}><i />{gpsStatus.message}</span>}
-            <div className="notif-wrap">
-              <button className="notif-bell" onClick={toggleNotif} title="Notifikasi">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <div className="notif-wrap" ref={notifRef}>
+              <button
+                className={`notif-bell ${notifOpen ? 'is-open' : ''} ${notifCount > 0 ? 'has-unread' : ''}`}
+                onClick={toggleNotif}
+                title="Notifikasi"
+                aria-label={`Notifikasi (${notifCount} baru)`}
+                aria-expanded={notifOpen}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                 </svg>
-                {notifCount > 0 && <span className="notif-badge">{notifCount}</span>}
+                {notifCount > 0 && <span className="notif-badge">{notifCount > 99 ? '99+' : notifCount}</span>}
               </button>
               {notifOpen && (
-                <div className="notif-panel">
-                  <div className="notif-panel-head"><b>Notifikasi</b><button onClick={() => setNotifOpen(false)}>✕</button></div>
-                  {notifications.length === 0
-                    ? <div className="notif-empty">Tidak ada notifikasi</div>
-                    : notifications.slice(0, 10).map(n => (
-                      <div key={n.id} className={`notif-item${!n.read_at ? ' unread' : ''}`}>
-                        <span>{n.message}</span>
-                        <small>{dateTime(new Date(n.created_at).getTime())}</small>
+                <div className="notif-panel" role="dialog" aria-label="Daftar Notifikasi">
+                  <div className="notif-panel-head">
+                    <div className="notif-panel-title">
+                      <b>Notifikasi</b>
+                      {notifCount > 0 && <span className="notif-pill">{notifCount} baru</span>}
+                    </div>
+                    <div className="notif-panel-actions">
+                      {notifCount > 0 && (
+                        <button type="button" className="notif-mark-btn" onClick={onMarkRead} title="Tandai semua telah dibaca">
+                          Tandai dibaca
+                        </button>
+                      )}
+                      <button type="button" className="notif-close-btn" onClick={() => setNotifOpen(false)} aria-label="Tutup">✕</button>
+                    </div>
+                  </div>
+
+                  <div className="notif-tabs">
+                    <button type="button" className={`notif-tab ${tab === 'all' ? 'active' : ''}`} onClick={() => setTab('all')}>
+                      Semua ({notifications.length})
+                    </button>
+                    <button type="button" className={`notif-tab ${tab === 'unread' ? 'active' : ''}`} onClick={() => setTab('unread')}>
+                      Belum dibaca ({unreadItems.length})
+                    </button>
+                  </div>
+
+                  <div className="notif-list">
+                    {displayedItems.length === 0 ? (
+                      <div className="notif-empty">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="notif-empty-icon">
+                          <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                        </svg>
+                        <p>{tab === 'unread' ? 'Semua notifikasi sudah dibaca' : 'Belum ada notifikasi'}</p>
                       </div>
-                    ))
-                  }
+                    ) : (
+                      displayedItems.map(n => {
+                        const iconData = notifIcon(n.type)
+                        const isUnread = !n.read_at
+                        return (
+                          <button
+                            key={n.id}
+                            type="button"
+                            className={`notif-item ${isUnread ? 'unread' : ''} ${n.taskId ? 'clickable' : ''}`}
+                            onClick={() => handleItemClick(n)}
+                          >
+                            <div className={`notif-item-icon ${iconData.cls}`}>
+                              {iconData.svg}
+                            </div>
+                            <div className="notif-item-body">
+                              <span className="notif-item-msg">{n.message}</span>
+                              <div className="notif-item-meta">
+                                <small>{dateTime(new Date(n.created_at).getTime())}</small>
+                                {n.taskId ? <span className="notif-item-link">Buka tugas ›</span> : null}
+                              </div>
+                            </div>
+                            {isUnread && <span className="notif-dot" title="Belum dibaca" />}
+                          </button>
+                        )
+                      })
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -111,3 +224,4 @@ export default function Shell({ user, role, view, setView, logout, notifCount, n
     </div>
   )
 }
+
