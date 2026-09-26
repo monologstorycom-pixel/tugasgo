@@ -196,6 +196,38 @@ function broadcastAll(event, data) {
   }
 }
 
+async function sendPushNotification(userIds, payload) {
+  if (!userIds || !userIds.length) return
+  try {
+    const placeholders = userIds.map(() => '?').join(',')
+    const [devices] = await pool.query(
+      `SELECT token, platform FROM user_devices WHERE user_id IN (${placeholders})`,
+      userIds
+    )
+    if (!devices.length) return
+    if (process.env.FCM_SERVER_KEY) {
+      for (const dev of devices) {
+        fetch('https://fcm.googleapis.com/fcm/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `key=${process.env.FCM_SERVER_KEY}`
+          },
+          body: JSON.stringify({
+            to: dev.token,
+            notification: {
+              title: payload.title || 'TugasGo',
+              body: payload.body || payload.message,
+              sound: 'default'
+            },
+            data: payload.data || {}
+          })
+        }).catch(() => {})
+      }
+    }
+  } catch {}
+}
+
 async function notifyTaskEvent(taskId, type, actorId) {
   const task = await getTask(taskId)
   if (!task) return
@@ -231,6 +263,12 @@ async function notifyTaskEvent(taskId, type, actorId) {
   broadcast([...recipientIds], 'notification', { type, taskId, message: msg })
   // broadcast task update ke semua yang bisa lihat
   broadcast([task.creatorId, task.assigneeId, ...admins.map(a => Number(a.id))], 'task_updated', { task: await presentTask(task) })
+  // push notification ke native devices
+  sendPushNotification([...recipientIds], {
+    title: type === 'TASK_CREATED' ? 'Tugas Baru Diterima' : 'Update Tugas',
+    body: msg,
+    data: { taskId: String(taskId), type }
+  })
 }
 
 // ─── HTTP handler ─────────────────────────────────────────────────────────────
@@ -258,10 +296,37 @@ export async function handler(req, res) {
       return json(res, 200, { ok: true })
     }
 
-    // ── settings (public read) ────────────────────────────────────────────────
+    // ── settings & version ───────────────────────────────────────────────────
     if (req.method === 'GET' && p === '/api/settings') {
       const [[row]] = await pool.query("SELECT val FROM app_settings WHERE setting_key='guest_mode'")
       return json(res, 200, { settings: { guest_mode: row?.val || 'false' } })
+    }
+
+    if (req.method === 'GET' && p === '/api/app/version') {
+      const [rows] = await pool.query("SELECT setting_key, val FROM app_settings WHERE setting_key IN ('app_min_version','app_latest_version','app_download_url','app_update_notes')")
+      const map = Object.fromEntries(rows.map(r => [r.setting_key, r.val]))
+      return json(res, 200, {
+        minVersion: map.app_min_version || '1.0.0',
+        latestVersion: map.app_latest_version || '1.0.0',
+        downloadUrl: map.app_download_url || 'https://tugasgo.rsby.cloud',
+        updateNotes: map.app_update_notes || 'Pembaruan aplikasi TugasGo'
+      })
+    }
+
+    if (req.method === 'PATCH' && p === '/api/admin/app/version') {
+      const user = await requireUser(req)
+      requireRole(user, 'ADMIN')
+      const b = await readBody(req)
+      const allowed = ['app_min_version', 'app_latest_version', 'app_download_url', 'app_update_notes']
+      for (const [key, val] of Object.entries(b)) {
+        if (allowed.includes(key) && typeof val === 'string') {
+          await pool.execute(
+            'INSERT INTO app_settings(setting_key,val) VALUES(?,?) ON DUPLICATE KEY UPDATE val=VALUES(val)',
+            [key, val]
+          )
+        }
+      }
+      return json(res, 200, { ok: true })
     }
 
     if (req.method === 'PATCH' && p === '/api/admin/settings') {
@@ -273,6 +338,30 @@ export async function handler(req, res) {
         'INSERT INTO app_settings(setting_key,val) VALUES(?,?) ON DUPLICATE KEY UPDATE val=VALUES(val)',
         ['guest_mode', String(guestMode)]
       )
+      return json(res, 200, { ok: true })
+    }
+
+    // ── device push tokens (FCM / APNs) ──────────────────────────────────────
+    if (req.method === 'POST' && p === '/api/device/push-token') {
+      const user = await requireUser(req)
+      const b = await readBody(req)
+      if (!b.token || typeof b.token !== 'string') return json(res, 400, { error: 'Token wajib diisi' })
+      const platform = ['ANDROID', 'IOS', 'WEB'].includes(b.platform) ? b.platform : 'ANDROID'
+      const appVersion = typeof b.appVersion === 'string' ? b.appVersion.slice(0, 30) : null
+      await pool.execute(
+        `INSERT INTO user_devices (user_id, token, platform, app_version, last_active_at)
+         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP(3))
+         ON DUPLICATE KEY UPDATE user_id=VALUES(user_id), platform=VALUES(platform), app_version=VALUES(app_version), last_active_at=CURRENT_TIMESTAMP(3)`,
+        [user.id, b.token, platform, appVersion]
+      )
+      return json(res, 200, { ok: true })
+    }
+
+    if (req.method === 'DELETE' && p === '/api/device/push-token') {
+      const user = await requireUser(req)
+      const b = await readBody(req)
+      if (!b.token || typeof b.token !== 'string') return json(res, 400, { error: 'Token wajib diisi' })
+      await pool.execute('DELETE FROM user_devices WHERE user_id=? AND token=?', [user.id, b.token])
       return json(res, 200, { ok: true })
     }
 
@@ -578,6 +667,50 @@ export async function handler(req, res) {
       return json(res, 200, { ok: true })
     }
 
+    if (req.method === 'POST' && p === '/api/locations/batch') {
+      const user = await requireUser(req)
+      requireRole(user, 'DRIVER')
+      const b = await readBody(req)
+      if (!Array.isArray(b.locations) || !b.locations.length) return json(res, 400, { error: 'Daftar lokasi tidak boleh kosong' })
+      const [active] = await pool.execute(
+        "SELECT id FROM tasks WHERE assignee_id=? AND status='IN_PROGRESS' ORDER BY started_at DESC LIMIT 1",
+        [user.id]
+      )
+      if (!active[0]) return json(res, 409, { error: 'Tidak ada tugas aktif' })
+      const taskId = Number(active[0].id)
+      const validPoints = []
+      for (const loc of b.locations) {
+        try {
+          const parsed = parseLocation(loc)
+          const recDate = loc.recordedAt ? new Date(loc.recordedAt) : new Date()
+          if (!isNaN(recDate.getTime())) validPoints.push({ ...parsed, recordedAt: recDate })
+        } catch {}
+      }
+      if (!validPoints.length) return json(res, 400, { error: 'Semua titik lokasi tidak valid' })
+
+      for (const pt of validPoints) {
+        await pool.execute(
+          'INSERT INTO driver_locations(driver_id,task_id,latitude,longitude,accuracy,recorded_at) VALUES(?,?,?,?,?,?)',
+          [user.id, taskId, pt.latitude, pt.longitude, pt.accuracy, pt.recordedAt]
+        )
+      }
+      const latest = validPoints[validPoints.length - 1]
+      await pool.execute(
+        `INSERT INTO driver_last_location(driver_id,task_id,latitude,longitude,accuracy,updated_at)
+         VALUES(?,?,?,?,?,CURRENT_TIMESTAMP(3))
+         ON DUPLICATE KEY UPDATE task_id=VALUES(task_id),latitude=VALUES(latitude),longitude=VALUES(longitude),accuracy=VALUES(accuracy),updated_at=CURRENT_TIMESTAMP(3)`,
+        [user.id, taskId, latest.latitude, latest.longitude, latest.accuracy]
+      )
+      const [recipients] = await pool.execute(
+        `SELECT id FROM users WHERE (role IN ('ADMIN', 'STAFF') OR id=?) AND active=TRUE`,
+        [user.id]
+      )
+      broadcast(recipients.map(recipient => Number(recipient.id)), 'driver_location', {
+        driverId: user.id, driverName: user.name, taskId, latitude: latest.latitude, longitude: latest.longitude, accuracy: latest.accuracy, updatedAt: Date.now()
+      })
+      return json(res, 200, { ok: true, saved: validPoints.length })
+    }
+
     if (req.method === 'GET' && p === '/api/activity') {
       const user = await requireUser(req)
       requireRole(user, 'STAFF', 'ADMIN')
@@ -760,6 +893,40 @@ export async function handler(req, res) {
       await file.save(optimized, { contentType: 'image/webp', resumable: false })
       const [signedUrl] = await file.getSignedUrl({ action: 'read', expires: Date.now() + 7 * 24 * 60 * 60 * 1000 })
       return json(res, 200, { url: signedUrl, key })
+    }
+
+    // ── presigned upload URL (Direct upload dari Native App / Web ke GCS) ─────
+    if (req.method === 'POST' && (p === '/api/uploads/request-url' || p === '/api/public/upload-url')) {
+      let owner
+      if (p === '/api/public/upload-url') {
+        rateLimit(req, 'guest-upload-url', 10, 60 * 60 * 1000)
+        const [[guestRow]] = await pool.query("SELECT val FROM app_settings WHERE setting_key='guest_mode'")
+        if (!guestRow || guestRow.val !== 'true') return json(res, 403, { error: 'Guest mode tidak aktif' })
+        owner = 'guest'
+      } else {
+        const user = await requireUser(req)
+        rateLimit(req, 'upload-url', 60, 60 * 60 * 1000)
+        owner = user.id
+      }
+      if (!gcs || !gcsBucket) return json(res, 503, { error: 'Penyimpanan foto belum dikonfigurasi' })
+      const b = await readBody(req)
+      const photoType = b.photoType === 'REFERENCE' ? 'REFERENCE' : 'COMPLETION'
+      if (p === '/api/public/upload-url' && photoType !== 'REFERENCE') return json(res, 400, { error: 'Guest hanya dapat upload foto referensi' })
+      const ext = ['png', 'webp', 'jpeg', 'jpg'].includes(b.ext) ? b.ext : 'webp'
+      const contentType = b.contentType || `image/${ext === 'jpg' ? 'jpeg' : ext}`
+      const key = `${photoType.toLowerCase()}/${owner}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+      const file = gcsBucket.file(key)
+      const [uploadUrl] = await file.getSignedUrl({
+        version: 'v4',
+        action: 'write',
+        expires: Date.now() + 15 * 60 * 1000,
+        contentType
+      })
+      const [readUrl] = await file.getSignedUrl({
+        action: 'read',
+        expires: Date.now() + 7 * 24 * 60 * 60 * 1000
+      })
+      return json(res, 200, { uploadUrl, readUrl, key, method: 'PUT', headers: { 'Content-Type': contentType } })
     }
 
     // ── report ───────────────────────────────────────────────────────────────
@@ -1184,6 +1351,20 @@ async function syncAttendance(force = false) {
 }
 
 if (process.env.NODE_ENV !== 'test') {
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS user_devices (
+      id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+      user_id BIGINT UNSIGNED NOT NULL,
+      token VARCHAR(255) NOT NULL UNIQUE,
+      platform ENUM('ANDROID','IOS','WEB') NOT NULL DEFAULT 'ANDROID',
+      app_version VARCHAR(30) NULL,
+      last_active_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      CONSTRAINT fk_user_devices_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      INDEX idx_user_devices_user (user_id)
+    )
+  `).catch(err => console.error('Init user_devices failed:', err.message))
+
   const cleanupLocations = () => pool.execute("DELETE FROM driver_locations WHERE recorded_at<DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 30 DAY)").catch(error => console.error('Cleanup lokasi gagal:', error.message))
   cleanupLocations()
   const cleanupTimer = setInterval(cleanupLocations, 24 * 60 * 60 * 1000)
