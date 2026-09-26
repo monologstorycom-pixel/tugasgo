@@ -7,7 +7,11 @@
 !tsconfig*.json
 !.oxlintrc.json
 !public/manifest.json
+!mobile/*.json
+!mobile/**/*.json
+
 !public/.well-known/assetlinks.json
+
 
 # Logs
 logs

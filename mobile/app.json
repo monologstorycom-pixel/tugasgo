@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "TugasGo",
+    "slug": "tugasgo",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "tugasgo",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.rsby.tugasgo",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "TugasGo memerlukan akses lokasi untuk pelacakan tugas pengantaran.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "TugasGo memerlukan akses latar belakang agar tracking rute driver tetap berjalan saat layar mati.",
+        "NSCameraUsageDescription": "TugasGo memerlukan kamera untuk bukti foto penyelesaian tugas."
+      }
+    },
+    "android": {
+      "package": "com.rsby.tugasgo",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#2563EB",
+        "foregroundImage": "./assets/images/android-icon-foreground.png"
+      },
+      "permissions": [
+        "CAMERA",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Izinkan TugasGo mengakses lokasi driver setiap saat untuk pelacakan tugas."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Izinkan akses foto untuk upload bukti tugas."
+        }
+      ]
+    ]
+  }
+}
+
