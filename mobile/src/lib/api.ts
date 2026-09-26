@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { GpsPoint } from './types'
+import { GpsPoint, Task } from './types'
 
 export const API_BASE_URL = 'https://tugasgo.rsby.cloud/api'
 export const WS_BASE_URL = 'wss://tugasgo.rsby.cloud/ws'
@@ -44,6 +44,39 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
   return response.json()
 }
 
+// ── Task Actions ─────────────────────────────────────────────────────────────
+export async function startTask(taskId: number): Promise<{ task: Task }> {
+  return request<{ task: Task }>(`/tasks/${taskId}/start`, {
+    method: 'PATCH',
+    body: JSON.stringify({}),
+  })
+}
+
+export async function completeTask(
+  taskId: number,
+  data: { note?: string; photos: string[]; latitude?: number | null; longitude?: number | null }
+): Promise<{ task: Task }> {
+  return request<{ task: Task }>(`/tasks/${taskId}/complete`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function cancelTask(taskId: number, reason: string): Promise<{ task: Task }> {
+  return request<{ task: Task }>(`/tasks/${taskId}/cancel`, {
+    method: 'PATCH',
+    body: JSON.stringify({ reason }),
+  })
+}
+
+export async function fetchTasks(): Promise<{ tasks: Task[] }> {
+  return request<{ tasks: Task[] }>('/tasks')
+}
+
+export async function fetchTaskTimeline(taskId: number): Promise<{ events: any[] }> {
+  return request<{ events: any[] }>(`/tasks/${taskId}/timeline`)
+}
+
 // ── Push Token Registration ──────────────────────────────────────────────────
 export async function registerPushToken(token: string, platform: 'ANDROID' | 'IOS' = 'ANDROID') {
   return request('/device/push-token', {
@@ -55,14 +88,12 @@ export async function registerPushToken(token: string, platform: 'ANDROID' | 'IO
 // ── GPS Tracking & Offline Buffer ─────────────────────────────────────────────
 export async function sendLocation(latitude: number, longitude: number, accuracy: number | null) {
   try {
-    // Flush any buffered offline points first
     await flushOfflineLocations()
     return await request('/location', {
       method: 'POST',
       body: JSON.stringify({ latitude, longitude, accuracy }),
     })
   } catch {
-    // If network fails, buffer locally
     await bufferOfflineLocation({
       latitude,
       longitude,
@@ -77,7 +108,6 @@ export async function bufferOfflineLocation(point: GpsPoint) {
     const raw = await AsyncStorage.getItem(OFFLINE_GPS_KEY)
     const list: GpsPoint[] = raw ? JSON.parse(raw) : []
     list.push(point)
-    // Keep max 200 points in buffer
     if (list.length > 200) list.shift()
     await AsyncStorage.setItem(OFFLINE_GPS_KEY, JSON.stringify(list))
   } catch {}
@@ -98,31 +128,69 @@ export async function flushOfflineLocations() {
   } catch {}
 }
 
-// ── Direct GCS Photo Upload ───────────────────────────────────────────────────
+// ── Photo Upload ─────────────────────────────────────────────────────────────
 export async function uploadTaskPhoto(
   uri: string,
   photoType: 'REFERENCE' | 'COMPLETION' = 'COMPLETION'
 ): Promise<string> {
-  const ext = uri.split('.').pop()?.toLowerCase() || 'jpg'
-  const contentType = ext === 'png' ? 'image/png' : 'image/jpeg'
+  const token = await getAuthToken()
+  const filename = uri.split('/').pop() || `photo_${Date.now()}.jpg`
+  const ext = filename.split('.').pop()?.toLowerCase() || 'jpg'
+  const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg'
 
-  // 1. Get presigned upload URL from backend
-  const { uploadUrl, key } = await request<{ uploadUrl: string; key: string }>(
-    '/uploads/request-url',
-    {
-      method: 'POST',
-      body: JSON.stringify({ photoType, contentType, ext: ext === 'png' ? 'png' : 'jpg' }),
-    }
-  )
+  const formData = new FormData()
+  formData.append('file', {
+    uri,
+    name: filename,
+    type: mimeType,
+  } as any)
+  formData.append('photoType', photoType)
 
-  // 2. Direct binary PUT upload to Google Cloud Storage
-  const photoBlob = await (await fetch(uri)).blob()
-  const uploadRes = await fetch(uploadUrl, {
-    method: 'PUT',
-    headers: { 'Content-Type': contentType },
-    body: photoBlob,
+  const headers: Record<string, string> = {}
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
+  const response = await fetch(`${API_BASE_URL}/upload`, {
+    method: 'POST',
+    headers,
+    body: formData,
   })
 
-  if (!uploadRes.ok) throw new Error('Gagal mengupload foto ke cloud storage')
-  return key
+  const body = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(body.error || 'Gagal mengunggah foto bukti')
+  }
+
+  return (body.key || body.url) as string
 }
+
+// ── Time & Formatting Helpers ────────────────────────────────────────────────
+export const formatDuration = (sec: number) => {
+  const m = Math.floor(sec / 60)
+  const s = Math.floor(sec % 60)
+  if (m < 60) return `${m}m ${s < 10 ? '0' : ''}${s}s`
+  const h = Math.floor(m / 60)
+  return `${h}j ${m % 60}m`
+}
+
+export const formatAge = (created: number) => {
+  const diff = Date.now() - created
+  const mins = Math.floor(diff / 60_000)
+  if (mins < 1) return 'baru saja'
+  if (mins < 60) return `${mins} mnt lalu`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours} jam lalu`
+  return `${Math.floor(hours / 24)} hari lalu`
+}
+
+export const formatDateTime = (timestamp: number) => {
+  const d = new Date(timestamp)
+  return d.toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+

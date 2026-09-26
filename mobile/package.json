@@ -3,6 +3,7 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
+    "@expo-google-fonts/material-symbols": "^0.4.48",
     "@expo/ui": "~57.0.20",
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~57.0.25",
@@ -30,11 +31,13 @@
     "react-native-reanimated": "4.5.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
+    "react-native-svg": "15.15.4",
     "react-native-web": "~0.21.0",
     "react-native-worklets": "0.10.1"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "babel-preset-expo": "^57.0.13",
     "eas-cli": "^24.8.0",
     "typescript": "~6.0.3"
   },
@@ -45,6 +48,9 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint"
+  },
+  "overrides": {
+    "hermes-parser": "0.36.0"
   },
   "private": true
 }
