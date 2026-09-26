@@ -80,8 +80,9 @@ export default function Login({ onLogin }: { onLogin: (u: SessionUser, token: st
             <div className="dev-logins">
               <p className="eyebrow">DEV — QUICK LOGIN</p>
               <div className="dev-login-btns">
-                 <button type="button" onClick={() => doLogin('admin', 'Admin123!@#$%')} disabled={busy}>Admin</button>
-                 <button type="button" onClick={() => doLogin('risen', 'Driver123!@#$%')} disabled={busy}>Driver</button>
+                 <button type="button" onClick={() => doLogin('admin', '123456')} disabled={busy}>Admin (admin)</button>
+                 <button type="button" onClick={() => doLogin('hrga', '123456')} disabled={busy}>Admin (hrga)</button>
+                 <button type="button" onClick={() => doLogin('sandi', '123456')} disabled={busy}>Driver (sandi)</button>
               </div>
             </div>
           )}

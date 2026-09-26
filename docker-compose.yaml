@@ -20,8 +20,9 @@ services:
     environment:
       APP_ORIGIN: ${APP_ORIGIN:-https://tugasgo.rsby.cloud}
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Jakarta}
-      ATTENDANCE_API_URL: ${ATTENDANCE_API_URL:-https://mesin.rsby.cloud}
+      ATTENDANCE_API_URL: ${ATTENDANCE_API_URL:-https://absensi.rsby.cloud}
       ATTENDANCE_API_KEY: ${ATTENDANCE_API_KEY:-}
+      ATTENDANCE_DEVICE_ID: ${ATTENDANCE_DEVICE_ID:-f16df3576aa94baf}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL wajib diisi di Coolify}
       GCS_BUCKET: ${GCS_BUCKET:-}
       GCS_KEY_FILE: /app/secrets/gcs-key.json

@@ -67,6 +67,7 @@ export default function App() {
       if (selected?.id === updated.id) setSelected(updated)
     }
     if (event === 'notification') { const n = data as Notification; setNotifications(ns => [n, ...ns]); notify(n.message) }
+    if (event === 'drivers_updated') { if (user) loadAll(user) }
     if (event === 'driver_location') {
       const dl = data as DriverLocation
       setDriverLocations(locs => { const i = locs.findIndex(l => l.driverId === dl.driverId); if (i >= 0) { const n = [...locs]; n[i] = dl; return n }; return [...locs, dl] })

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Division, UserRecord, ApiRole } from '../types'
 import { request } from '../lib/api'
+import { useWebSocket } from '../lib/hooks'
 import { Badge } from '../components/ui'
 
 export default function Admin({ divisions, onReload, onOpenTasks }: { divisions: Division[]; onReload: () => void; onOpenTasks: () => void }) {
@@ -22,6 +23,10 @@ export default function Admin({ divisions, onReload, onOpenTasks }: { divisions:
     request<{ users: UserRecord[] }>('/admin/users').then(r => setUsers(r.users)).catch(() => {})
   }, [])
   useEffect(() => { load() }, [load])
+
+  useWebSocket(true, (event) => {
+    if (event === 'drivers_updated') load()
+  })
 
   useEffect(() => {
     request<{ settings: Record<string, string> }>('/settings')

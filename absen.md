@@ -116,8 +116,8 @@ TugasGo memakai log absensi untuk menentukan ketersediaan driver secara otomatis
 
 ```env
 APP_TIMEZONE=Asia/Jakarta
-ATTENDANCE_API_URL=https://mesin.rsby.cloud
-ATTENDANCE_API_KEY=<nilai SERVICE_API_KEY milik Attendance Service>
+ATTENDANCE_API_URL=https://absensi.rsby.cloud
+ATTENDANCE_API_KEY=<nilai LISTENER_API_KEY milik Attendance Service>
 ```
 
 `ATTENDANCE_API_KEY` pada TugasGo harus memiliki nilai yang sama persis dengan `SERVICE_API_KEY` pada Attendance Service. Secret hanya boleh tersedia saat runtime dan tidak boleh memakai awalan `VITE_`.

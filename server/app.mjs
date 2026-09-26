@@ -10,10 +10,11 @@ const pool = mysql.createPool({ uri: process.env.DATABASE_URL, connectionLimit: 
 const port = Number(process.env.PORT || 3001)
 const allowedOrigin = process.env.APP_ORIGIN || 'http://localhost:5173'
 // Terima semua origin yang mengakses port 5173 (localhost dan IP lokal)
-const isAllowedOrigin = origin => !origin || origin === allowedOrigin || /^http:\/\/192\.168\.\d+\.\d+:5173$/.test(origin) || origin === 'http://localhost:5173'
+const isAllowedOrigin = origin => !origin || origin === allowedOrigin || /^http:\/\/192\.168\.\d+\.\d+:5173$/.test(origin) || origin === 'http://localhost:5173' || origin === 'http://127.0.0.1:5173'
 const cookieName = 'tugasgo_session'
 const rateBuckets = new Map()
 const rateLimit = (req, key, limit, windowMs) => {
+  if (process.env.NODE_ENV !== 'production') return
   const id = `${key}:${req.socket.remoteAddress || 'unknown'}`
   const now = Date.now()
   const bucket = rateBuckets.get(id)
@@ -25,9 +26,14 @@ const rateLimit = (req, key, limit, windowMs) => {
 }
 
 // Google Cloud Storage — opsional, hanya aktif kalau env tersedia
-const gcs = process.env.GCS_BUCKET ? new Storage(
-  process.env.GCS_KEY_FILE ? { keyFilename: process.env.GCS_KEY_FILE } : {}
-) : null
+const gcsCredentials = (() => {
+  if (process.env.GCS_KEY_FILE) return { keyFilename: process.env.GCS_KEY_FILE }
+  if (process.env.GCS_KEY_JSON) {
+    try { return { credentials: JSON.parse(process.env.GCS_KEY_JSON) } } catch {}
+  }
+  return {}
+})()
+const gcs = process.env.GCS_BUCKET ? new Storage(gcsCredentials) : null
 const gcsBucket = gcs ? gcs.bucket(process.env.GCS_BUCKET) : null
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -118,8 +124,12 @@ const rowTask = row => ({
 })
 const photoUrl = async value => {
   if (!value || /^https?:\/\//i.test(value) || value.startsWith('blob:') || !gcsBucket) return value
-  const [url] = await gcsBucket.file(value).getSignedUrl({ action: 'read', expires: Date.now() + 60 * 60 * 1000 })
-  return url
+  try {
+    const [url] = await gcsBucket.file(value).getSignedUrl({ action: 'read', expires: Date.now() + 60 * 60 * 1000 })
+    return url
+  } catch {
+    return value
+  }
 }
 const presentTask = async task => ({
   ...task,
@@ -171,6 +181,15 @@ function broadcast(userIds, event, data) {
   for (const uid of userIds) {
     const sockets = clients.get(uid)
     if (!sockets) continue
+    for (const ws of sockets) {
+      if (ws.readyState === 1) ws.send(msg)
+    }
+  }
+}
+
+function broadcastAll(event, data) {
+  const msg = JSON.stringify({ event, data })
+  for (const sockets of clients.values()) {
     for (const ws of sockets) {
       if (ws.readyState === 1) ws.send(msg)
     }
@@ -260,8 +279,18 @@ export async function handler(req, res) {
     if (req.method === 'POST' && p === '/api/admin/attendance/sync') {
       const user = await requireUser(req)
       requireRole(user, 'ADMIN')
-      await syncAttendance()
+      await syncAttendance(true)
       return json(res, 200, { ok: true, message: 'Sinkronisasi absensi berhasil' })
+    }
+
+    if (req.method === 'POST' && p === '/api/attendance/webhook') {
+      const authHeader = req.headers.authorization || ''
+      const expectedKey = process.env.ATTENDANCE_API_KEY
+      if (expectedKey && authHeader !== `Bearer ${expectedKey}` && req.headers['x-api-key'] !== expectedKey) {
+        return json(res, 401, { error: 'API key tidak valid' })
+      }
+      await syncAttendance(true)
+      return json(res, 200, { ok: true, message: 'Webhook sync berhasil' })
     }
 
     // ── public endpoints (guest mode) ─────────────────────────────────────────
@@ -426,7 +455,8 @@ export async function handler(req, res) {
         [user.id, hashToken(token)]
       )
       return json(res, 200, {
-        user: { id: Number(user.id), name: user.name, username: user.username, role: user.role, divisionId: user.divisionId ? Number(user.divisionId) : null }
+        user: { id: Number(user.id), name: user.name, username: user.username, role: user.role, divisionId: user.divisionId ? Number(user.divisionId) : null },
+        token
       }, { 'set-cookie': cookie(token) })
     }
 
@@ -499,6 +529,17 @@ export async function handler(req, res) {
       const driverId = Number(driverStatusMatch[1])
       const [result] = await pool.execute("UPDATE users SET availability_status=? WHERE id=? AND role='DRIVER'", [b.status, driverId])
       if (!result.affectedRows) return json(res, 404, { error: 'Driver tidak ditemukan' })
+      const [drv] = await pool.execute("SELECT name FROM users WHERE id=?", [driverId])
+      const normName = drv[0]?.name ? normalizeName(drv[0].name) : null
+      const currentScans = normName ? (memoryScansByName.get(normName) || []) : []
+      manualDriverOverrides.set(driverId, {
+        status: b.status,
+        name: normName,
+        lastScanCount: currentScans.length,
+        lastSeenScan: currentScans[0] || null,
+        at: Date.now()
+      })
+      broadcastAll('drivers_updated', {})
       return json(res, 200, { id: driverId, status: b.status })
     }
 
@@ -922,6 +963,7 @@ export async function handler(req, res) {
         'INSERT INTO users(name,username,password_hash,role,division_id,phone) VALUES(?,?,?,?,?,?)',
         [b.name.trim(), b.username.trim(), hash, b.role, divisionId, b.phone || null]
       )
+      if (b.role === 'DRIVER') syncAttendance(true).catch(() => {})
       return json(res, 201, { id: Number(result.insertId) })
     }
 
@@ -941,6 +983,7 @@ export async function handler(req, res) {
         if (!sets.length) return json(res, 400, { error: 'Tidak ada data yang diubah' })
         params.push(targetId)
         await pool.execute(`UPDATE users SET ${sets.join(',')} WHERE id=?`, params)
+        syncAttendance(true).catch(() => {})
         return json(res, 200, { ok: true })
       }
       if (req.method === 'DELETE') {
@@ -1032,16 +1075,47 @@ export async function handler(req, res) {
 
 // ─── Server + WebSocket ───────────────────────────────────────────────────────
 
-async function syncAttendance() {
+let memoryScansByName = new Map()
+let memoryDate = ''
+let memoryVersion = ''
+let isAttendanceSyncing = false
+const manualDriverOverrides = new Map()
+
+async function syncAttendance(force = false) {
   const baseUrl = process.env.ATTENDANCE_API_URL?.replace(/\/$/, '')
   const apiKey = process.env.ATTENDANCE_API_KEY
+  const deviceId = process.env.ATTENDANCE_DEVICE_ID ? process.env.ATTENDANCE_DEVICE_ID.trim() : null
   if (!baseUrl || !apiKey) return
-  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: process.env.APP_TIMEZONE || 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).formatToParts().map(part => [part.type, part.value]))
-  const currentHour = Number(parts.hour)
-  const date = `${parts.year}-${parts.month}-${parts.day}`
-  const [[lock]] = await pool.query("SELECT GET_LOCK('tugasgo-attendance-sync',0) acquired")
-  if (!lock?.acquired) return
+  if (isAttendanceSyncing && !force) return
+  isAttendanceSyncing = true
   try {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: process.env.APP_TIMEZONE || 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).formatToParts().map(part => [part.type, part.value]))
+    const currentHour = Number(parts.hour)
+    const date = `${parts.year}-${parts.month}-${parts.day}`
+
+    let newVersion = null
+    let needFetch = force || memoryDate !== date || !memoryScansByName.size
+    if (!force) {
+      try {
+        const vUrl = new URL(`${baseUrl}/api/v1/version`)
+        vUrl.searchParams.set('tanggal_awal', date)
+        vUrl.searchParams.set('tanggal_akhir', date)
+        if (deviceId) vUrl.searchParams.set('device_id', deviceId)
+        const vRes = await fetch(vUrl, { headers: { authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(4_000) })
+        if (vRes.ok) {
+          const vBody = await vRes.json()
+          if (vBody.berhasil && vBody.data?.version != null) {
+            newVersion = String(vBody.data.version)
+            if (newVersion !== memoryVersion) needFetch = true
+          }
+        }
+      } catch {
+        needFetch = true
+      }
+    }
+
+    if (!needFetch) return
+
     const scansByName = new Map()
     let sourceSync = null
     let offset = 0
@@ -1051,7 +1125,8 @@ async function syncAttendance() {
       url.searchParams.set('tanggal_akhir', date)
       url.searchParams.set('limit', '5000')
       url.searchParams.set('offset', String(offset))
-      const response = await fetch(url, { headers: { authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(15_000) })
+      if (deviceId) url.searchParams.set('device_id', deviceId)
+      const response = await fetch(url, { headers: { authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(10_000) })
       if (!response.ok) throw new Error(`Attendance API ${response.status}`)
       const body = await response.json()
       if (!body.berhasil || !Array.isArray(body.data)) throw new Error('Respons attendance tidak valid')
@@ -1065,17 +1140,46 @@ async function syncAttendance() {
       offset += body.data.length
       if (!body.data.length || offset >= Number(body.meta?.total || 0)) break
     }
-    const [drivers] = await pool.query("SELECT id,name FROM users WHERE role='DRIVER' AND active=TRUE")
+    memoryScansByName = scansByName
+    memoryDate = date
+    if (newVersion) memoryVersion = newVersion
+
+    const [drivers] = await pool.query("SELECT id,name,availability_status FROM users WHERE role='DRIVER' AND active=TRUE")
     const conn = await pool.getConnection()
     try {
       await conn.beginTransaction()
-      for (const driver of drivers) await conn.execute('UPDATE users SET availability_status=? WHERE id=?', [attendanceStatus(driver.name, scansByName, currentHour), driver.id])
+      let hasChange = false
+      for (const driver of drivers) {
+        const override = manualDriverOverrides.get(driver.id)
+        const normName = normalizeName(driver.name)
+        const driverScans = memoryScansByName.get(normName) || []
+        if (override) {
+          const hasNewScan = driverScans.length > override.lastScanCount || (driverScans.length > 0 && driverScans[0] !== override.lastSeenScan)
+          if (hasNewScan) {
+            manualDriverOverrides.delete(driver.id)
+            const nextStatus = attendanceStatus(driver.name, memoryScansByName, currentHour)
+            await conn.execute('UPDATE users SET availability_status=? WHERE id=?', [nextStatus, driver.id])
+            hasChange = true
+          }
+        } else {
+          const nextStatus = attendanceStatus(driver.name, memoryScansByName, currentHour)
+          if (driver.availability_status !== nextStatus) {
+            await conn.execute('UPDATE users SET availability_status=? WHERE id=?', [nextStatus, driver.id])
+            hasChange = true
+          }
+        }
+      }
       await conn.execute("INSERT INTO app_settings(setting_key,val) VALUES('attendance_last_sync_date',?) ON DUPLICATE KEY UPDATE val=VALUES(val)", [date])
       if (sourceSync) await conn.execute("INSERT INTO app_settings(setting_key,val) VALUES('attendance_last_source_sync',?) ON DUPLICATE KEY UPDATE val=VALUES(val)", [sourceSync])
+      if (newVersion) await conn.execute("INSERT INTO app_settings(setting_key,val) VALUES('attendance_last_version',?) ON DUPLICATE KEY UPDATE val=VALUES(val)", [newVersion])
       await conn.commit()
+      if (hasChange || force) broadcastAll('drivers_updated', {})
     } catch (error) { await conn.rollback(); throw error } finally { conn.release() }
+  } catch (err) {
+    if (force) throw err
+    console.error('syncAttendance error:', err.message)
   } finally {
-    await pool.query("SELECT RELEASE_LOCK('tugasgo-attendance-sync')")
+    isAttendanceSyncing = false
   }
 }
 
@@ -1086,7 +1190,7 @@ if (process.env.NODE_ENV !== 'test') {
   cleanupTimer.unref()
   const runAttendanceSync = () => syncAttendance().catch(error => console.error('Sinkron absensi gagal:', error.message))
   runAttendanceSync()
-  const attendanceTimer = setInterval(runAttendanceSync, 5 * 60 * 1000)
+  const attendanceTimer = setInterval(runAttendanceSync, 5 * 1000)
   attendanceTimer.unref()
   const server = createServer(handler)
   const wss = new WebSocketServer({
